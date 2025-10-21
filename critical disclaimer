@@ -1,0 +1,1 @@
+The post-quantum (RLWE) functions in src/otaka_protocol/helper.py are dummy stubs. They simulate the flow but provide no security.

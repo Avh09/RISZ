@@ -1,0 +1,3 @@
+Place the "BioIdent: Touchstroke-based biometrics" dataset (e.g., as a .csv file) in this directory.
+
+You will need to update the file path in 'evaluation/load_data.py' to match the name of your dataset file.
