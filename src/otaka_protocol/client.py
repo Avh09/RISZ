@@ -1,44 +1,89 @@
 import socket
+import json
+import numpy as np
 from .helper import (
-    h, get_timestamp, check_timestamp, send_message, recv_message,
-    rlwe_sample_from_chi_delta, rlwe_generate_public_key, 
-    rlwe_compute_shared_values, Mod2
+    h, xor_data, get_timestamp, check_timestamp, send_message, recv_message,
+    rlwe_generate_keypair, rlwe_compute_shared_secret, Mod2
 )
 
 # --- Client (Ui) Setup ---
 HOST = '127.0.0.1'
 PORT = 65432
-DELTA_T = 10  # 10 seconds for timestamp verification
+DELTA_T = 10
+CLIENT_STORAGE_FILE = "client_storage.json"
 
-# --- Dummy Stored Credentials ---
-# [cite_start]This data is stored on the device after Registration (Section IV-C) [cite: 220]
-# [cite_start]We assume the user has successfully logged in (Phase D) [cite: 231]
-my_IDi = "ID_user_001"
-my_TIDi = "TID_user_001"
-my_t3 = "dummy_t3_for_user_001" # Simulating successful login
-my_x = "dummy_user_secret_x"   # Simulating successful login
+def simulate_user_login():
+    """
+    Simulates the User Login Phase (Section IV-D).
+    Reads stored credentials and reconstructs secrets.
+    """
+    print("[Ui] --- Starting User Login Phase (IV-D) ---")
+    try:
+        with open(CLIENT_STORAGE_FILE, "r") as f:
+            client_data = json.load(f)
+    except FileNotFoundError:
+        print(f"Error: '{CLIENT_STORAGE_FILE}' not found.")
+        print("Please run 'python -m src.otaka_protocol.registration' first.")
+        return None
+
+    # 1. Simulate user inputting credentials
+    IDi_input = "user_001"
+    PWi_star_input = "password123"
+    BMi_star_input = "biometric_data_scan_1" # Correct scan
+    
+    # 2. Simulate fuzzy extractor Rep(BMi*, τi)
+    sigma_i_star = h(BMi_star_input)
+    
+    # 3. Derive secrets
+    # t3 = t*3 ⊕ h(σ*i || IDi)
+    t3_rec = xor_data(client_data['t3_star'], h(sigma_i_star, IDi_input))
+    
+    # x = x* ⊕ h(PW*i || σ*i || t3)
+    x_rec_hex = xor_data(client_data['x_star'], h(PWi_star_input, sigma_i_star, t3_rec))
+    
+    # 4. Verify t'2 with stored t2
+    # t'2 = x ⊕ h(IDi || PW*i || σ*i)
+    t2_prime = xor_data(x_rec_hex, h(IDi_input, PWi_star_input, sigma_i_star))
+    
+    if t2_prime == client_data['t2']:
+        print("[Ui] Login Successful. Secrets reconstructed.")
+        return {
+            "IDi": client_data['IDi'], "TIDi": client_data['TIDi'],
+            "t3": t3_rec, "x_hex": x_rec_hex
+        }
+    else:
+        print("[Ui] Login Failed. Credentials do not match.")
+        return None
 
 def run_client():
-    print("Client (Ui) is starting...")
+    login_secrets = simulate_user_login()
+    if not login_secrets:
+        return
+
+    my_IDi = login_secrets['IDi']
+    my_TIDi = login_secrets['TIDi']
+    my_t3 = login_secrets['t3']
+    my_x_hex = login_secrets['x_hex']
+    
+    print("\n[Ui] --- Starting OTAKA Phase (IV-E) ---")
+    
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.connect((HOST, PORT))
-            print(f"Client connected to {HOST}:{PORT}")
+            print(f"[Ui] Connected to server {HOST}:{PORT}")
 
-            # [cite_start]--- OTAKA Step 1: Send M1 [cite: 235-238] ---
+            # --- OTAKA Step 1: Send M1 ---
             
             # 1. Generate client's keys
-            f1 = rlwe_sample_from_chi_delta()
-            e1 = rlwe_sample_from_chi_delta()
-            ai = rlwe_generate_public_key(f1, e1) # ai = α*f1 + 2*e1
+            (f1, e1), ai = rlwe_generate_keypair() # (private), public
             
             TS1 = get_timestamp()
             
             # 2. Calculate values for M1
-            X1 = my_IDi # Dummy, real is IDi XOR h(t3 || TS1 || TIDi)
-            s1 = h(my_x, TS1)
-            s2 = s1 # Dummy, real is s1 XOR h(t3 || TS1 || TIDi)
-            X2 = h(ai, X1, TS1, my_TIDi, s2)
+            X1 = xor_data(my_IDi.encode().hex(), h(my_t3, TS1, my_TIDi))
+            s1 = h(my_x_hex, TS1)
+            s2 = xor_data(s1, h(my_t3, TS1, my_TIDi))
+            X2 = h(np.array_str(ai), X1, TS1, my_TIDi, s2)
             
             M1 = {
                 "X1": X1, "X2": X2, "TIDi": my_TIDi, "ai": ai, "s2": s2, "TS1": TS1
@@ -47,31 +92,34 @@ def run_client():
             send_message(s, M1)
             print("\n[Ui] Sent M1.")
 
-            # [cite_start]--- OTAKA Step 3: Receive M2 and Send M3 [cite: 244-249] ---
+            # --- OTAKA Step 3: Receive M2 and Send M3 ---
             M2 = recv_message(s)
             if not M2:
                 raise ConnectionError("Server disconnected.")
                 
             print("[Ui] Received M2.")
             
-            # 1. Verify freshness
             if not check_timestamp(M2['TS2'], DELTA_T):
                 raise ValueError("M2 timestamp check failed. Possible replay attack.")
             
             # 2. Compute session key
-            bj = M2['bj']
-            dj = M2['dj']
+            bj = np.array(M2['bj'])
+            dj = np.array(M2['dj'])
             
-            c_prime_j = rlwe_compute_shared_values(f1, bj) # c'j = bj * f1
+            # c'j = bj * f1
+            c_prime_j = rlwe_compute_shared_secret(f1, bj)
+            # w'j = Mod2(c'j, dj)
             w_prime_j = Mod2(c_prime_j, dj)
             
-            # [cite_start]SKij = h(IDi || w'j || TS2 || TS1 || s1 || t3 || TIDi) [cite: 244]
+            # SKij = h(IDi || w'j || TS2 || TS1 || s1 || t3 || TIDi)
             SK_ij = h(my_IDi, w_prime_j, M2['TS2'], TS1, s1, my_t3, my_TIDi)
             print(f"[Ui] Client session key computed: {SK_ij[:10]}...")
 
-            # [cite_start]3. Derive new TID and verify server's key [cite: 244-246]
-            # TIDn = TIDn* XOR h(SKij || TS2 || t3 || TIDi)
-            TIDn = M2['TIDn_star'] # Dummy
+            # 3. Derive new TID and verify server's key
+            # TIDn = TIDn* ⊕ h(SKij || TS2 || t3 || TIDi)
+            TIDn = xor_data(M2['TIDn_star'], h(SK_ij, M2['TS2'], my_t3, my_TIDi))
+            
+            # SKVij = h(TIDn* || SKij || TS2 || bj || dj || t3 || TS1)
             SKV_ij = h(M2['TIDn_star'], SK_ij, M2['TS2'], M2['bj'], M2['dj'], my_t3, TS1)
             
             if SKV_ij != M2['SKVji']:
@@ -79,8 +127,8 @@ def run_client():
             
             print("[Ui] Server SKV verified. Mutual authentication successful.")
             
-            # [cite_start]4. Update TID and send ACK (M3) [cite: 247-249]
-            my_TIDi = TIDn # Update TID for next session
+            # 4. Update TID and send ACK (M3)
+            my_TIDi = TIDn 
             TS3 = get_timestamp()
             ACK = h(my_TIDi, SK_ij, TS3)
             
