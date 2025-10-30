@@ -2,7 +2,7 @@ import socket
 import json
 import numpy as np
 from .helper import (
-    h, xor_data, get_timestamp, check_timestamp, send_message, recv_message,
+    canonical_hash, h, hex_to_str, xor_data, get_timestamp, check_timestamp, send_message, recv_message,
     rlwe_generate_keypair, rlwe_compute_shared_secret, Mod2
 )
 
@@ -112,15 +112,41 @@ def run_client():
             w_prime_j = Mod2(c_prime_j, dj)
             
             # SKij = h(IDi || w'j || TS2 || TS1 || s1 || t3 || TIDi)
+            print("[Ui] Key derivation components:")
+            print("IDi:", my_IDi)
+            print("w'j:", w_prime_j[:10], "...")
+            print("TS2:", M2['TS2'])
+            print("TS1:", TS1)
+            print("s1:", s1[:10], "...")
+            print("t3:", my_t3[:10], "...")
+            print("TIDi:", my_TIDi)
+
             SK_ij = h(my_IDi, w_prime_j, M2['TS2'], TS1, s1, my_t3, my_TIDi)
             print(f"[Ui] Client session key computed: {SK_ij[:10]}...")
 
             # 3. Derive new TID and verify server's key
             # TIDn = TIDn* ⊕ h(SKij || TS2 || t3 || TIDi)
-            TIDn = xor_data(M2['TIDn_star'], h(SK_ij, M2['TS2'], my_t3, my_TIDi))
+            # TIDn = xor_data(M2['TIDn_star'], h(SK_ij, M2['TS2'], my_t3, my_TIDi))
+            hash_hex_cli = canonical_hash(SK_ij, M2['TS2'], my_t3, my_TIDi)
+            TIDn_hex = xor_data(M2['TIDn_star'], hash_hex_cli)   # hex string representing TIDn
+            TIDn = hex_to_str(TIDn_hex)       
             
             # SKVij = h(TIDn* || SKij || TS2 || bj || dj || t3 || TS1)
-            SKV_ij = h(M2['TIDn_star'], SK_ij, M2['TS2'], M2['bj'], M2['dj'], my_t3, TS1)
+            print("Debug: Deriving SKVij for server verification.")
+            print("TIDn*:", TIDn)
+            print("SKij:", SK_ij)
+            print("TS2:", M2['TS2'])
+            print("bj:", M2['bj'])
+            print("dj:", M2['dj'])
+            print("t3:", my_t3)
+            print("TS1:", TS1)
+
+            SKV_ij = canonical_hash(M2['TIDn_star'], SK_ij, M2['TS2'],
+                        json.dumps(M2['bj'], separators=(',',':')),
+                        json.dumps(M2['dj'], separators=(',',':')),
+                        my_t3, TS1)
+
+
             
             if SKV_ij != M2['SKVji']:
                 raise ValueError("SKV check failed. Server is not authentic.")
@@ -130,7 +156,13 @@ def run_client():
             # 4. Update TID and send ACK (M3)
             my_TIDi = TIDn 
             TS3 = get_timestamp()
-            ACK = h(my_TIDi, SK_ij, TS3)
+            print("DEBUG (client) TIDi used for ACK:", my_TIDi)
+            print("DEBUG (client) SK_ij used for ACK:", SK_ij)
+            print("DEBUG (client) TS3 used for ACK:", TS3)
+            TS3_str = str(TS3).replace(" ", "T")
+            ACK = canonical_hash(my_TIDi, SK_ij, TS3_str)
+
+            print("DEBUG (client) ACK computed:", ACK)
             
             M3 = {"ACK": ACK, "TS3": TS3}
             

@@ -8,7 +8,41 @@ from numpy.polynomial import polynomial as p
 # ==============================================================================
 # CRYPTOGRAPHIC PRIMITIVES (Section VI)
 # ==============================================================================
+import json
+import hashlib
 
+def canonical_hash(*args) -> str:
+    """
+    Deterministic hex-string SHA-256 of the canonical serialization
+    of each argument. Always returns a hex string.
+    Cleans null bytes and whitespace to ensure consistent hashing across devices.
+    """
+    parts = []
+    for a in args:
+        # --- Type normalization ---
+        if isinstance(a, bytes):
+            a_str = a.decode('utf-8', errors='ignore')
+        elif isinstance(a, str):
+            a_str = a
+        elif hasattr(a, 'tolist'):  # numpy arrays, etc.
+            a_str = json.dumps(a.tolist(), separators=(',',':'))
+        else:
+            a_str = str(a)
+
+        # --- Clean up ---
+        a_str = a_str.replace('\x00', '').strip()
+        parts.append(a_str)
+
+    # --- Join and hash ---
+    h_input = "||".join(parts).encode('utf-8')
+    print("Hash input", h_input)
+    return hashlib.sha256(h_input).hexdigest()
+
+def str_to_hex(s: str) -> str:
+    return s.encode('utf-8').hex()
+
+def hex_to_str(hx: str) -> str:
+    return bytes.fromhex(hx).decode('utf-8')
 def h(*args):
     """
     The post-quantum secure hash function h(·).
@@ -62,6 +96,18 @@ N = 1024
 Q = 1073479681 # Paper's q = 1073479681
 # Define the polynomial ring Rq = Zq[x] / (x^n + 1)
 POLY_MOD = [1] + [0] * (N - 1) + [1] 
+PARAMS_FILE = "rlwe_params.npz"
+
+def make_random_A_poly(seed=None):
+    # deterministic RNG if seed provided
+    rng = np.random.default_rng(seed)
+    A = (rng.integers(0, Q, size=(N))).astype(np.int64)
+    # reduce modulo polynomial (x^N + 1)
+    A = p.polydiv(A, POLY_MOD)[1].astype(int) % Q
+    if len(A) < N:
+        A = np.pad(A, (0, N - len(A)), 'constant').astype(int)
+    return A
+
 
 # Public parameter 'alpha' (called 'A' in the GitHub code)
 # This is generated once and published by the MS
@@ -168,3 +214,13 @@ def recv_message(sock):
     if not data:
         return None
     return json.loads(data.decode('utf-8'))
+
+if os.path.exists(PARAMS_FILE):
+    data = np.load(PARAMS_FILE)
+    A_poly = data['A_poly'].astype(int)
+else:
+    # Option A: use a fixed seed for deterministic generation across test machines
+    # seed = 123456789
+    # Option B (safer): generate once and write file, so server and client share it
+    A_poly = make_random_A_poly(seed=None)
+    np.savez(PARAMS_FILE, A_poly=A_poly)

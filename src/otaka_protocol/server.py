@@ -2,7 +2,7 @@ import socket
 import json
 import numpy as np
 from .helper import (
-    h, xor_data, get_timestamp, check_timestamp, send_message, recv_message,
+    canonical_hash, h, str_to_hex, xor_data, get_timestamp, check_timestamp, send_message, recv_message,
     rlwe_generate_keypair, rlwe_compute_shared_secret, Mod2, Cha
 )
 
@@ -92,16 +92,40 @@ def run_server():
                 TS2 = get_timestamp()
                 
                 # SKji = h(IDi || wj || TS2 || TS1 || s1 || t3 || TIDi) [cite: 243]
+                print("[MS] Key derivation components:")
+                print("IDi:", IDi_stored)
+                print("wj:", wj[:10], "...")
+                print("TS2:", TS2)
+                print("TS1:", M1['TS1'])
+                print("s1:", s1_derived[:10], "...")
+                print("t3:", t3[:10], "...")
+                print("TIDi:", TIDi)
+
                 SK_ji = h(IDi_stored, wj, TS2, M1['TS1'], s1_derived, t3, TIDi)
                 print(f"[MS] Server session key computed: {SK_ji[:10]}...")
 
                 # 6. Prepare M2
                 TIDn = user_data['TIDn']
                 # TIDn* = TIDn ⊕ h(SKji || TS2 || t3 || TIDi) [cite: 243]
-                TIDn_star = xor_data(TIDn.encode().hex(), h(SK_ji, TS2, t3, TIDi))
-                
+                # TIDn_star = xor_data(TIDn.encode().hex(), h(SK_ji, TS2, t3, TIDi))
+                TIDn_hex = str_to_hex(TIDn)                               # canonical hex of TIDn
+                hash_hex_for_xor = canonical_hash(SK_ji, TS2, t3, TIDi)   # hex string
+                TIDn_star = xor_data(TIDn_hex, hash_hex_for_xor)         # hex string result
+                                
                 # SKVji = h(TIDn* || SKji || TS2 || bj || dj || t3 || TS1) [cite: 243]
-                SKV_ji = h(TIDn_star, SK_ji, TS2, bj, dj, t3, M1['TS1'])
+                print("Debug: Deriving SKVji for client verification.")
+                print("TIDn*:", TIDn_star)
+                print("SKij:", SK_ji)
+                print("TS2:", TS2)
+                print("bj:", bj)
+                print("dj:", dj)
+                print("t3:", t3)
+                print("TS1:", M1['TS1'])
+                
+                SKV_ji = canonical_hash(TIDn_star, SK_ji, TS2,
+                        json.dumps(bj.tolist(), separators=(',',':')),
+                        json.dumps(dj.tolist(), separators=(',',':')),
+                        t3, M1['TS1'])
                 
                 M2 = {
                     "SKVji": SKV_ji, "TS2": TS2, "bj": bj, "dj": dj, "TIDn_star": TIDn_star
@@ -121,7 +145,15 @@ def run_server():
                     raise ValueError("M3 timestamp check failed.")
                 
                 # Verify ACK' = ACK [cite: 250]
-                ACK_prime = h(TIDn, SK_ji, M3['TS3'])
+                print("DEBUG (server) TIDn used for ACK:", TIDn)
+                print("DEBUG (server) SK_ji used for ACK:", SK_ji)
+                print("DEBUG (server) TS3 from client:", M3['TS3'])
+                # print("DEBUG (server) ACK computed:", ACK_prime)
+                print("DEBUG (server) ACK received :", M3['ACK'])
+                TS3_f = M3['TS3']
+                TS3_str = str(TS3_f).replace(" ", "T")
+                ACK_prime = canonical_hash(TIDn, SK_ji, TS3_str)
+                print("DEBUG (server) ACK computed:", ACK_prime)
                 
                 if ACK_prime != M3['ACK']:
                     raise ValueError("ACK verification failed.")

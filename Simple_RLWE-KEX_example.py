@@ -60,7 +60,7 @@ while (i < len(u)):
 	elif (int(bB[i]/(3*q/4)) == 0): u[i] = 0
 	elif (int(bB[i]/(q)) == 0): u[i] = 1
 	else:
-		print "error! (1)"
+		print("error! (1)")
 	i+=1
 
 
@@ -82,7 +82,7 @@ while (i < len(u)):
 			sharedBob[i] = 1
 
 	else:
-		print "error! (2)"
+		print("error! (2)")
 
 	i += 1
 
@@ -105,7 +105,7 @@ while (i < len(u)):
 			sharedAlice[i] = 1
 
 	else:
-		print "error! (3)"
+		print("error! (3)")
 	i += 1
 
 
@@ -113,24 +113,24 @@ while (i < len(u)):
 
 
 #
-print "A:",len(A),"|",A
-print "\n-Alice---"
-print " s:",len(sA),"|",sA
-print " e:",len(eA),"|",eA
-print " b:",len(bA),"|",bA
-print "\n-Bob---"
-print " s':",len(sB),"|",sB
-print " e':",len(eB),"|",eB
-print " b':",len(bB),"|",bB
-print " u :",len(u),"|",u
-print "\n"
-print "Shared Secret Alice:",len(sharedAlice),"|",sharedAlice
-print "Shared Secret Bob:",len(sharedBob),"|",sharedBob
+print("A:",len(A),"|",A)
+print("\n-Alice---")	
+print(" s:",len(sA),"|",sA)
+print(" e:",len(eA),"|",eA)
+print(" b:",len(bA),"|",bA)
+print("\n-Bob---")
+print(" s':",len(sB),"|",sB)
+print(" e':",len(eB),"|",eB)
+print(" b':",len(bB),"|",bB)
+print(" u :",len(u),"|",u)
+print("\n")
+print("Shared Secret Alice:",len(sharedAlice),"|",sharedAlice)
+print("Shared Secret Bob:",len(sharedBob),"|",sharedBob)
 
 
-print "\n\n--Verification--"
+print("\n\n--Verification--")
 i = 0
 while (i < len(sharedBob)):
 	if (sharedAlice[i] != sharedBob[i]):
-		print "Error at index",i
+		print("Error at index",i)
 	i+=1

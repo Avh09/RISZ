@@ -61,7 +61,7 @@ def run_impersonation_attack():
         
         if res.get("matched_user_id") != alice_id:
             print(f"  Result: ✅ SUCCESSFUL DEFENSE. Matched '{res.get('matched_user_id')}', not '{alice_id}'.")
-            [cite_start]print("  The system would now terminate the session[cite: 291].")
+            print("  The system would now terminate the session[cite: 291].")
         else:
             print(f"  Result: ❌ FAILED DEFENSE. Attacker was incorrectly matched as '{alice_id}'.")
     except Exception as e:
