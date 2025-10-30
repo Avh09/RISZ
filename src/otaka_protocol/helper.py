@@ -224,3 +224,52 @@ else:
     # Option B (safer): generate once and write file, so server and client share it
     A_poly = make_random_A_poly(seed=None)
     np.savez(PARAMS_FILE, A_poly=A_poly)
+    
+    
+# ... (keep all your existing functions: h, xor_data, get_timestamp, etc.)
+# ... (keep all the REAL RLWE IMPLEMENTATION functions)
+# ... (keep the NETWORK HELPER FUNCTIONS)
+
+# ==============================================================================
+# NEW: AES-256-CBC ENCRYPTION (Section IV-F)
+# ==============================================================================
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives import padding
+from cryptography.hazmat.backends import default_backend
+
+def encrypt_data(hex_key, hex_iv, plaintext_str):
+    """
+    Encrypts plaintext using AES-256-CBC with the session key.
+    
+    """
+    backend = default_backend()
+    key = bytes.fromhex(hex_key)
+    iv = bytes.fromhex(hex_iv)
+    
+    # Pad the plaintext to be a multiple of the block size
+    padder = padding.PKCS7(algorithms.AES.block_size).padder()
+    padded_data = padder.update(plaintext_str.encode('utf-8')) + padder.finalize()
+    
+    cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=backend)
+    encryptor = cipher.encryptor()
+    ct = encryptor.update(padded_data) + encryptor.finalize()
+    return ct.hex() # Return hex string for easy JSON transport
+
+def decrypt_data(hex_key, hex_iv, ciphertext_hex):
+    """
+    Decrypts ciphertext using AES-256-CBC with the session key.
+    [cite: 274]
+    """
+    backend = default_backend()
+    key = bytes.fromhex(hex_key)
+    iv = bytes.fromhex(hex_iv)
+    ct = bytes.fromhex(ciphertext_hex)
+    
+    cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=backend)
+    decryptor = cipher.decryptor()
+    padded_plaintext = decryptor.update(ct) + decryptor.finalize()
+    
+    # Unpad the data
+    unpadder = padding.PKCS7(algorithms.AES.block_size).unpadder()
+    plaintext = unpadder.update(padded_plaintext) + unpadder.finalize()
+    return plaintext.decode('utf-8')

@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+pymilvus
+pandas
+matplotlib
+requests
+numpy
+scikit-learn
+cryptography

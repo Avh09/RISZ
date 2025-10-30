@@ -1,20 +1,17 @@
 import json
 import os
 import hashlib
-
-# --- Import helper functions ---
-# We will create this helper.py file next
-from .helper import h, xor_data
+from .helper import h, str_to_hex, xor_data
 
 def run_registration():
     """
     Simulates the User Registration and FVDB Creation Phase (Section IV-C).
-    We generate secrets and store them in JSON files as a mock database.
     """
     print("--- Running Registration Phase (Section IV-C) ---")
 
     # --- Step 1: Ui picks credentials ---
-    IDi = "user_001"
+    # CRITICAL: This IDi MUST match a user_id in your 'features_extracted.csv'
+    IDi = "1.0" 
     PWi = "password123"
     BMi = "biometric_data_scan_1"
     
@@ -30,7 +27,7 @@ def run_registration():
     
     # --- Step 2 (Server Side): MS receives request and computes t3 ---
     k_master_secret = os.urandom(32).hex() # Server's long-term secret key k
-    TIDi = "TID_user_001" # Server picks a temporary ID
+    TIDi = "TID_user_1.0" # Server picks a temporary ID
     t3 = xor_data(t2, h(k_master_secret, IDi))
     print("MS generated t3 and TIDi.")
     
@@ -56,9 +53,8 @@ def run_registration():
         TIDi: {
             "IDi": IDi,
             "t3": t3,
-            "TIDn": "TIDn_user_001_initial" # New TID for next session
+            "TIDn": "TIDn_user_1.0_initial" # New TID for next session
         },
-        # We also store the master key 'k'
         "MASTER_SECRET_K": k_master_secret
     }
     with open("server_storage.json", "w") as f:

@@ -1,8 +1,8 @@
 {
-  "TID_user_001": {
-    "IDi": "user_001",
-    "t3": "d560dd1b66aae369bbdeddb00325db0d2928e1d4c2fa6d6282fdf1c5002540fd",
-    "TIDn": "TIDn_user_001_initial"
+  "TID_user_1.0": {
+    "IDi": "1.0",
+    "t3": "81e7563f295a0a3707b4256e012d34f44568b3d4b97456faa46a00d7cb25c74c",
+    "TIDn": "TIDn_user_1.0_initial"
   },
-  "MASTER_SECRET_K": "9dc2e2a92152d1d161282956477b3444736b5c5afdba57bdfab454fa1c8667c9"
+  "MASTER_SECRET_K": "24cd3c77f009ddacdc92581cd74ec42537b44dbdb8140b24f83b090653ae6b72"
 }

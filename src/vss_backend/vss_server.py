@@ -1,117 +1,120 @@
 import uvicorn
+import pandas as pd
+import numpy as np
 from fastapi import FastAPI
 from pydantic import BaseModel
-from pymilvus import MilvusClient, DataType, FieldSchema, CollectionSchema
+from sklearn.neighbors import NearestNeighbors
+from sklearn.preprocessing import StandardScaler
+from contextlib import asynccontextmanager
+from sklearn.model_selection import train_test_split # <-- NEW
 
-# --- Configuration ---
-MILVUS_URI = "http://127.0.0.1:19530"  # Default Milvus Lite / Standalone
-COLLECTION_NAME = "cabb_db"
-[cite_start]VECTOR_DIMENSION = 15  # Based on the BioIdent dataset [cite: 762]
-[cite_start]METRIC_TYPE = "L2"     # Euclidean distance, as mentioned in paper [cite: 720]
+# --- Constants ---
+FEATURE_COLUMNS = [
+    'strokeDuration', 'startX', 'startY', 'stopX', 'stopY',
+    'directEndToEndDistance', 'meanResultantLength', 'upDownLeftRightFlag',
+    'directionOfEndToEndLine', 'largestDeviationFromEndToEndLine',
+    'averageDirection', 'lengthOfTrajectory', 'averageVelocity',
+    'midStrokePressure', 'midStrokeArea'
+]
+DATASET_PATH = 'features_extracted.csv'
 
-# --- Pydantic Models for API Data Validation ---
-class UserVector(BaseModel):
-    user_id: str
-    vector: list[float]
-
+# --- Pydantic Model for API ---
 class QueryVector(BaseModel):
     vector: list[float]
 
-# --- Setup FastAPI App ---
-app = FastAPI(title="HPostQCA-VSS Continuous Authentication Service")
-client = MilvusClient(uri=MILVUS_URI)
+# --- Global VSS Model Objects ---
+scaler = StandardScaler()
+vss_model = NearestNeighbors(n_neighbors=1, algorithm='auto')
+db_labels = np.array([])
 
-def setup_milvus_collection():
+# --- NEW: Lifespan Event Handler ---
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     """
-    [cite_start]Implements the "cabb_vector_db_crea" logic[cite: 793].
-    Creates the Milvus collection schema as described.
+    Load data, train scaler, and fit the NN model on startup.
+    This now only uses 80% of each user's data.
     """
+    global db_labels, scaler, vss_model
+    print("--- VSS Server Startup ---")
+    
+    # --- 1. Load Data ---
     try:
-        if client.has_collection(COLLECTION_NAME):
-            print(f"Collection '{COLLECTION_NAME}' already exists.")
-            return
-
-        # 1. Define fields
-        fields = [
-            FieldSchema(name="pk", dtype=DataType.VARCHAR, is_primary=True, auto_id=True, max_length=100),
-            FieldSchema(name="user_id", dtype=DataType.VARCHAR, max_length=256),
-            FieldSchema(name="vector", dtype=DataType.FLOAT_VECTOR, dim=VECTOR_DIMENSION)
-        ]
+        df = pd.read_csv(DATASET_PATH)
+    except FileNotFoundError:
+        print(f"FATAL ERROR: Could not find '{DATASET_PATH}'.")
+        print("Please run 'python -m src.vss_backend.preprocess.feature_extract' first.")
+        yield
+        return
         
-        # 2. Create collection schema
-        schema = CollectionSchema(fields=fields, description="CABB Vector Database")
+    df['upDownLeftRightFlag'], _ = pd.factorize(df['upDownLeftRightFlag'])
+
+    # --- 2. Build the "Feature Vector Database" (FVDB) ---
+    print("Building the VSS Database with 80% of data...")
+    
+    registration_vectors = []
+    
+    all_user_ids = df['user_id'].unique()
+
+    for user_id in all_user_ids:
+        user_df = df[df['user_id'] == user_id]
         
-        # 3. Create collection
-        client.create_collection(collection_name=COLLECTION_NAME, schema=schema)
-        
-        # 4. Create index for the vector field
-        # [cite_start]We use ANNOY as mentioned in the paper [cite: 720]
-        index_params = client.prepare_index_params()
-        index_params.add_index(
-            field_name="vector",
-            index_type="ANNOY",
-            metric_type=METRIC_TYPE,
-            params={"n_trees": 10}
-        )
-        client.create_index(collection_name=COLLECTION_NAME, index_params=index_params)
-        print(f"Collection '{COLLECTION_NAME}' and index created.")
-    except Exception as e:
-        print(f"Error setting up Milvus: {e}")
-
-@app.on_event("startup")
-def startup_event():
-    """Run this when the server starts."""
-    setup_milvus_collection()
-
-# --- API Endpoints (Section VII-E, FastAPI Design) ---
-
-@app.post("/register", tags=["VSS"])
-async def register_user_biometrics(item: UserVector):
-    """
-    [cite_start]Implements the "registration_of_behavioral_biometrics_of_a_user" endpoint[cite: 917].
-    """
-    try:
-        if len(item.vector) != VECTOR_DIMENSION:
-            return {"status": "error", "message": f"Vector must have dimension {VECTOR_DIMENSION}"}
-        
-        data = [{"user_id": item.user_id, "vector": item.vector}]
-        res = client.insert(collection_name=COLLECTION_NAME, data=data)
-        return {"status": "success", "milvus_response": res}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-
-@app.post("/check_similarity", tags=["VSS"])
-async def check_user_similarity(item: QueryVector):
-    """
-    [cite_start]Implements the "chk_similarity_of_behavioral_biometrics_of_a_user" endpoint[cite: 922].
-    [cite_start]This is the core of the Continuous Authentication (CA) [cite: 282-286].
-    """
-    try:
-        if len(item.vector) != VECTOR_DIMENSION:
-            return {"status": "error", "message": f"Vector must have dimension {VECTOR_DIMENSION}"}
-
-        # Search for the most similar vector (top-k = 1)
-        res = client.search(
-            collection_name=COLLECTION_NAME,
-            data=[item.vector],
-            limit=1,  # Get the single best match
-            output_fields=["user_id"]
+        # Split this user's data into 80% train (registration) and 20% test (live)
+        # We set shuffle=False to take the first 80%
+        train_data, _ = train_test_split(
+            user_df, 
+            test_size=0.20, 
+            shuffle=False 
         )
         
-        # Parse the result
-        if not res or not res[0]:
-            return {"status": "no_match_found"}
-            
-        top_match = res[0][0]
+        user_registration_vectors = train_data[FEATURE_COLUMNS].values
+        
+        registration_vectors.extend(user_registration_vectors)
+        db_labels = np.append(db_labels, [user_id] * len(user_registration_vectors))
+
+    # --- 3. Scale the Features ---
+    print("Fitting StandardScaler on registration data...")
+    scaler.fit(registration_vectors)
+    db_vectors_scaled = scaler.transform(registration_vectors)
+    print("Registration data has been scaled.")
+
+    # --- 4. "Index" the SCALED Database ---
+    print("Indexing the SCALED database... (Fitting NearestNeighbors model)")
+    vss_model.fit(db_vectors_scaled)
+    print(f"Database is ready. Total registered vectors: {len(db_vectors_scaled)}")
+    
+    # --- Lifespan Part 2: Yield control ---
+    yield
+    
+    # --- Lifespan Part 3: Cleanup (optional) ---
+    print("--- VSS Server Shutting Down ---")
+
+# --- Initialize FastAPI App with the new lifespan ---
+app = FastAPI(title="VSS Backend Server", lifespan=lifespan)
+
+
+@app.post("/check_similarity")
+def check_user_similarity(item: QueryVector):
+    """
+    Implements the "chk_similarity_of_behavioral_biometrics_of_a_user" endpoint.
+    This is the core of the Continuous Authentication (CA).
+    """
+    try:
+        query_vector_2d = np.array(item.vector).reshape(1, -1)
+        query_vector_scaled = scaler.transform(query_vector_2d)
+        
+        distances, indices = vss_model.kneighbors(query_vector_scaled)
+        
+        retrieved_id = db_labels[indices[0][0]]
+        distance = distances[0][0]
+        
         return {
             "status": "match_found",
-            "matched_user_id": top_match.get('entity', {}).get('user_id'),
-            "distance": top_match.get('distance')
+            "matched_user_id": float(retrieved_id),
+            "distance": float(distance)
         }
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
 if __name__ == "__main__":
-    print(f"Starting FastAPI VSS server on http://127.0.0.1:8000")
-    print(f"View API docs at http://127.0.0.1:8000/docs")
+    print(f"Starting VSS server on http://127.0.0.1:8000")
     uvicorn.run(app, host="127.0.0.1", port=8000)
