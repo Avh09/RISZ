@@ -159,40 +159,87 @@ def rlwe_compute_shared_secret(private_key_s, public_key_b):
         c = np.pad(c, (0, N - len(c)), 'constant')
     return c.astype(int)
 
+# def Cha(poly):
+#     """
+#     This is the Characteristic function (dj = Cha(cj)).
+#     It creates the "signal" bits for reconciliation.
+#     """
+#     signal_bits = np.zeros(N, dtype=int)
+#     for i in range(N):
+#         val = poly[i]
+#         if 0 <= val < Q / 4:
+#             signal_bits[i] = 0
+#         elif Q / 4 <= val < Q / 2:
+#             signal_bits[i] = 1
+#         elif Q / 2 <= val < 3 * Q / 4:
+#             signal_bits[i] = 0
+#         elif 3 * Q / 4 <= val <= Q:
+#             signal_bits[i] = 1
+#     return signal_bits
+
+# NEW FAST VERSION (Vectorized)
 def Cha(poly):
     """
     This is the Characteristic function (dj = Cha(cj)).
-    It creates the "signal" bits for reconciliation.
+    It runs in optimized C via Numpy, not a slow Python loop.
     """
+    Q_4 = Q / 4
+    Q_2 = Q / 2
+    Q_3_4 = 3 * Q / 4
+
+    # Create boolean masks
+    cond1 = (poly >= Q_4) & (poly < Q_2)
+    cond2 = (poly >= Q_3_4) & (poly <= Q)
+
+    # Apply masks
     signal_bits = np.zeros(N, dtype=int)
-    for i in range(N):
-        val = poly[i]
-        if 0 <= val < Q / 4:
-            signal_bits[i] = 0
-        elif Q / 4 <= val < Q / 2:
-            signal_bits[i] = 1
-        elif Q / 2 <= val < 3 * Q / 4:
-            signal_bits[i] = 0
-        elif 3 * Q / 4 <= val <= Q:
-            signal_bits[i] = 1
+    signal_bits[cond1] = 1
+    signal_bits[cond2] = 1
+
     return signal_bits
 
+# def Mod2(shared_poly, signal_bits):
+#     """
+#     This is the Modular function (wj = Mod2(cj, dj)).
+#     It uses the signal to extract the shared key bits.
+#     """
+#     key_bits = np.zeros(N, dtype=int)
+#     for i in range(N):
+#         val = shared_poly[i]
+#         if signal_bits[i] == 0: # Region 0 (0-Q/4) and (Q/2-3Q/4)
+#             if (Q * 0.125 <= val < Q * 0.625): key_bits[i] = 1
+#             else: key_bits[i] = 0
+#         else: # Region 1 (Q/4-Q/2) and (3Q/4-Q)
+#             if (Q * 0.375 <= val < Q * 0.875): key_bits[i] = 1
+#             else: key_bits[i] = 0
+    
+#     # Convert the array of 0s/1s into a single hash
+#     return h(np.array_str(key_bits))
+
+# NEW FAST VERSION (Vectorized)
 def Mod2(shared_poly, signal_bits):
     """
     This is the Modular function (wj = Mod2(cj, dj)).
-    It uses the signal to extract the shared key bits.
+    It runs in optimized C via Numpy, not a slow Python loop.
     """
     key_bits = np.zeros(N, dtype=int)
-    for i in range(N):
-        val = shared_poly[i]
-        if signal_bits[i] == 0: # Region 0 (0-Q/4) and (Q/2-3Q/4)
-            if (Q * 0.125 <= val < Q * 0.625): key_bits[i] = 1
-            else: key_bits[i] = 0
-        else: # Region 1 (Q/4-Q/2) and (3Q/4-Q)
-            if (Q * 0.375 <= val < Q * 0.875): key_bits[i] = 1
-            else: key_bits[i] = 0
-    
-    # Convert the array of 0s/1s into a single hash
+
+    # Define regions
+    Q_0_125 = Q * 0.125
+    Q_0_375 = Q * 0.375
+    Q_0_625 = Q * 0.625
+    Q_0_875 = Q * 0.875
+
+    # Region 0 (where signal_bits == 0)
+    mask_region0 = (signal_bits == 0)
+    mask_key_is_1_region0 = (shared_poly >= Q_0_125) & (shared_poly < Q_0_625)
+    key_bits[mask_region0 & mask_key_is_1_region0] = 1
+
+    # Region 1 (where signal_bits == 1)
+    mask_region1 = (signal_bits == 1)
+    mask_key_is_1_region1 = (shared_poly >= Q_0_375) & (shared_poly < Q_0_875)
+    key_bits[mask_region1 & mask_key_is_1_region1] = 1
+
     return h(np.array_str(key_bits))
 
 # ==============================================================================
