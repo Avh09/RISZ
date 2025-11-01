@@ -54,7 +54,7 @@ def run_replay_attack():
             
             if not M2:
                 print("  Server closed connection, as expected.")
-                [cite_start]print("\n  Result: ✅ SUCCESSFUL DEFENSE. The replay attack was blocked[cite: 314].")
+                    print("\n  Result: ✅ SUCCESSFUL DEFENSE. The replay attack was blocked[cite: 314].")
             else:
                 print(f"  Server responded with M2: {M2}")
                 print("\n  Result: ❌ FAILED DEFENSE. Server accepted a stale timestamp.")

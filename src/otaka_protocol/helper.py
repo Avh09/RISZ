@@ -284,6 +284,18 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives import padding
 from cryptography.hazmat.backends import default_backend
 
+def flip_one_bit(hex_string):
+    """Flips the first bit of the first byte of a hex string."""
+    try:
+        b = bytearray.fromhex(hex_string)
+        if not b: # Handle empty string
+            return ""
+        b[0] = b[0] ^ 1 # Flip the first bit
+        return b.hex()
+    except (ValueError, IndexError):
+        # Fallback if hex is invalid or empty
+        return h("flipped_fallback")
+
 def encrypt_data(hex_key, hex_iv, plaintext_str):
     """
     Encrypts plaintext using AES-256-CBC with the session key.
