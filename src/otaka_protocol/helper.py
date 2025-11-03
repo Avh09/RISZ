@@ -10,6 +10,15 @@ from numpy.polynomial import polynomial as p
 # ==============================================================================
 import json
 import hashlib
+import time
+import os
+
+# Global benchmark control
+BENCHMARK_MODE = os.getenv("RLWE_MODE", "NTT")  # "NTT" or "NAIVE"
+RLWE_LOG = []
+
+def log_rlwe_event(event, duration):
+    RLWE_LOG.append({"event": event, "duration": duration})
 
 def canonical_hash(*args) -> str:
     """
@@ -129,35 +138,39 @@ def gen_poly():
     return remainder.astype(int)
 
 def rlwe_generate_keypair():
-    """
-    Generates a private key (s, e) and a public key (b).
-    s = f (from paper)
-    e = e (from paper)
-    b = a_i or b_j (from paper)
-    Logic: b = A*s + e (paper uses 2*e, this is a common variant)
-    """
     s = gen_poly()
     e = gen_poly()
-    
-    b = p.polymul(A_poly, s)
+    start = time.time()
+    if BENCHMARK_MODE == "NTT":
+        from .rlwe_ntt import poly_mul_ntt
+        b = poly_mul_ntt(A_poly, s)
+    else:
+        b = p.polymul(A_poly, s)
+    end = time.time()
+    log_rlwe_event(f"{BENCHMARK_MODE}_keypair", end - start)
+
     b = p.polyadd(b, e) % Q
     b = p.polydiv(b, POLY_MOD)[1] % Q
-    
     if len(b) < N:
         b = np.pad(b, (0, N - len(b)), 'constant')
-        
     return (s, e), b.astype(int)
 
+
 def rlwe_compute_shared_secret(private_key_s, public_key_b):
-    """
-    Computes the shared secret.
-    Logic: c = s * b
-    """
-    c = p.polymul(private_key_s, public_key_b) % Q
+    start = time.time()
+    if BENCHMARK_MODE == "NTT":
+        from .rlwe_ntt import poly_mul_ntt
+        c = poly_mul_ntt(private_key_s, public_key_b)
+    else:
+        c = p.polymul(private_key_s, public_key_b) % Q
+    end = time.time()
+    log_rlwe_event(f"{BENCHMARK_MODE}_shared_secret", end - start)
+
     c = p.polydiv(c, POLY_MOD)[1] % Q
     if len(c) < N:
         c = np.pad(c, (0, N - len(c)), 'constant')
     return c.astype(int)
+
 
 # def Cha(poly):
 #     """
@@ -332,3 +345,12 @@ def decrypt_data(hex_key, hex_iv, ciphertext_hex):
     unpadder = padding.PKCS7(algorithms.AES.block_size).unpadder()
     plaintext = unpadder.update(padded_plaintext) + unpadder.finalize()
     return plaintext.decode('utf-8')
+
+import atexit, json
+@atexit.register
+def dump_benchmark_results():
+    if RLWE_LOG:
+        with open("rlwe_benchmark_log.json", "a") as f:
+            json.dump(RLWE_LOG, f)
+            f.write("\n")
+        print(f"[RLWE] Logged {len(RLWE_LOG)} events.")

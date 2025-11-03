@@ -1,0 +1,4 @@
+[{"event": "NAIVE_keypair", "duration": 0.00022149085998535156}, {"event": "NAIVE_shared_secret", "duration": 0.0006444454193115234}]
+[{"event": "NAIVE_keypair", "duration": 0.0002675056457519531}, {"event": "NAIVE_shared_secret", "duration": 0.0007603168487548828}]
+[{"event": "NTT_keypair", "duration": 0.7028820514678955}, {"event": "NTT_shared_secret", "duration": 0.007681846618652344}]
+[{"event": "NTT_keypair", "duration": 0.8099582195281982}, {"event": "NTT_shared_secret", "duration": 0.007802009582519531}]
