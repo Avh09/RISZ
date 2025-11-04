@@ -10,6 +10,7 @@ Requirements:
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+plt.rcParams.update({'font.size': 13})  # Increase default font size for all plots
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.neighbors import NearestNeighbors
 from sklearn.decomposition import PCA
