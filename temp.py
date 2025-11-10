@@ -1,54 +1,9 @@
-# --- Colors ---
-class C:
-    HEADER = "\033[95m"
-    BLUE = "\033[94m"
-    CYAN = "\033[96m"
-    GREEN = "\033[92m"
-    YELLOW = "\033[93m"
-    RED = "\033[91m"
-    BOLD = "\033[1m"
-    END = "\033[0m"
+from termcolor import colored
 
-import socket
-import json
-import numpy as np
-import pandas as pd
-import time
-from sklearn.model_selection import train_test_split
+# --- Update the print statements with color ---
 
-# --- Import all the necessary functions from your helper file ---
-from src.otaka_protocol.helper import (
-    canonical_hash, h, hex_to_str, str_to_hex, xor_data, get_timestamp, 
-    send_message, recv_message,
-    rlwe_generate_keypair, rlwe_compute_shared_secret, Mod2, Cha,
-    encrypt_data
-)
-
-# --- Configuration ---
-HOST = '127.0.0.1'
-PORT = 65432
-CLIENT_STORAGE_FILE = "client_storage.json"
-DATASET_PATH = 'features_extracted.csv'
-FEATURE_COLUMNS = [
-    'strokeDuration', 'startX', 'startY', 'stopX', 'stopY',
-    'directEndToEndDistance', 'meanResultantLength', 'upDownLeftRightFlag',
-    'directionOfEndToEndLine', 'largestDeviationFromEndToEndLine',
-    'averageDirection', 'lengthOfTrajectory', 'averageVelocity',
-    'midStrokePressure', 'midStrokeArea'
-]
-# --- End Configuration ---
-
-# --- Global truncation options ---
-np.set_printoptions(threshold=10, edgeitems=3, linewidth=100, suppress=True)
-
-def truncate(x, n=25):
-    """Return a short preview of x (string/list/np.array)."""
-    if x is None:
-        return "None"
-    if isinstance(x, (list, np.ndarray)):
-        x = np.array2string(np.array(x).flatten(), threshold=5)
-    s = str(x)
-    return s if len(s) <= n else s[:n] + "..."
+def print_colored(text, color='white'):
+    return colored(text, color)
 
 def simulate_user_login():
     """Simulates the legitimate user login phase."""
@@ -56,8 +11,8 @@ def simulate_user_login():
         with open(CLIENT_STORAGE_FILE, "r") as f:
             client_data = json.load(f)
     except FileNotFoundError:
-        print(f"{C.RED}Error: '{CLIENT_STORAGE_FILE}' not found.{C.END}")
-        print(f"{C.YELLOW}Please run 'python -m src.otaka_protocol.registration' first.{C.END}")
+        print(print_colored(f"Error: '{CLIENT_STORAGE_FILE}' not found.", color='red'))
+        print(print_colored("Please run 'python -m src.otaka_protocol.registration' first.", color='yellow'))
         return None
 
     # --- Use the same test credentials as registration ---
@@ -85,7 +40,7 @@ def load_impostor_vector(legitimate_user_id):
     try:
         df = pd.read_csv(DATASET_PATH)
     except FileNotFoundError:
-        print(f"{C.RED}Error: Dataset '{DATASET_PATH}' not found.{C.END}")
+        print(print_colored(f"Error: Dataset '{DATASET_PATH}' not found.", color='red'))
         return None
     
     df['upDownLeftRightFlag'], _ = pd.factorize(df['upDownLeftRightFlag'])
@@ -98,7 +53,7 @@ def load_impostor_vector(legitimate_user_id):
             break
             
     if impostor_id is None:
-        print(f"{C.RED}Error: Could not find any other users in the dataset to test.{C.END}")
+        print(print_colored("Error: Could not find any other users in the dataset to test.", color='red'))
         return None
 
     impostor_df = df[df['user_id'] == float(impostor_id)]
@@ -106,17 +61,17 @@ def load_impostor_vector(legitimate_user_id):
     # Get the 20% "test" data for the impostor
     _, test_data = train_test_split(impostor_df, test_size=0.20, shuffle=False)
     if test_data.empty:
-        print(f"{C.RED}Error: No live test vectors found for impostor {impostor_id}{C.END}")
+        print(print_colored(f"Error: No live test vectors found for impostor {impostor_id}", color='red'))
         return None
         
-    print(f"{C.GREEN}  Loaded one 'live' vector from impostor user: {impostor_id}{C.END}")
+    print(print_colored(f"  Loaded one 'live' vector from impostor user: {impostor_id}", color='green'))
     return test_data[FEATURE_COLUMNS].values.tolist()[0]
 
 def run_attack():
-    print(f"="*60)
-    print(f"  Demo: Impersonation Attack (Forged CA Data)")
-    print(f"  Tests if VSS can reject forged data in a valid session.")
-    print(f"="*60)
+    print(print_colored("\n" + "="*60, color='blue'))
+    print(print_colored("  Demo: Impersonation Attack (Forged CA Data)", color='magenta'))
+    print(print_colored("  Tests if VSS can reject forged data in a valid session.", color='magenta'))
+    print(print_colored("="*60, color='blue'))
     
     login_secrets = simulate_user_login()
     if not login_secrets:
@@ -127,12 +82,12 @@ def run_attack():
     my_t3 = login_secrets['t3']
     my_x_hex = login_secrets['x_hex']
     
-    print(f"{C.CYAN}\n[Phase 1: Impersonate User '{my_IDi}' via Handshake]{C.END}")
+    print(print_colored(f"\n[Phase 1: Impersonate User '{my_IDi}' via Handshake]", color='cyan'))
     
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.connect((HOST, PORT))
-            print(f"  Attacker connection established → {HOST}:{PORT}")
+            print(print_colored(f"  Attacker connection established → {HOST}:{PORT}", color='green'))
 
             # --- OTAKA handshake (Simulating a logged-in attacker) ---
             (f1, e1), ai = rlwe_generate_keypair()
@@ -159,51 +114,51 @@ def run_attack():
             ACK = canonical_hash(my_TIDi_next, SK_ij, TS3)
             M3 = {"ACK": ACK, "TS3": TS3}
             send_message(s, M3)
-            print(f"{C.GREEN}  Handshake complete. Attacker is authenticated as User '{my_IDi}'.{C.END}")
+            print(print_colored(f"  Handshake complete. Attacker is authenticated as User '{my_IDi}'.", color='green'))
             
             # --- Establish encryption keys ---
             session_key = SK_ij
             session_iv = h(my_t3, TS3)[:32] # The static IV
-            print(f"{C.YELLOW}  Session Key established: {truncate(session_key)}{C.END}")
+            print(print_colored(f"  Session Key established: {truncate(session_key)}", color='yellow'))
 
             # --- FORGED DATA PHASE ---
-            print(f"{C.CYAN}\n[Phase 2: Load Forged (Impostor) Data]{C.END}")
+            print(print_colored("\n[Phase 2: Load Forged (Impostor) Data]", color='cyan'))
             forged_vector = load_impostor_vector(my_IDi)
             if not forged_vector:
                 raise ValueError("Could not load forged vector.")
             
-            print(f"{C.YELLOW}  Vector preview: {truncate(forged_vector, 80)}{C.END}")
+            print(print_colored(f"  Vector preview: {truncate(forged_vector, 80)}", color='yellow'))
 
             # --- INJECTION PHASE ---
-            print(f"{C.CYAN}\n[Phase 3: Inject Forged Data into Valid Session]{C.END}")
+            print(print_colored("\n[Phase 3: Inject Forged Data into Valid Session]", color='cyan'))
             vector_json = json.dumps(forged_vector)
             encrypted_hex = encrypt_data(session_key, session_iv, vector_json)
-            print(f"{C.YELLOW}  Encrypted impostor vector: {truncate(encrypted_hex)}{C.END}")
+            print(print_colored(f"  Encrypted impostor vector: {truncate(encrypted_hex)}", color='yellow'))
 
             P_impostor_message = {"type": "CA_DATA", "payload": encrypted_hex}
             send_message(s, P_impostor_message)
             response = recv_message(s)
             
             # --- ANALYZE RESULT ---
-            print(f"{C.CYAN}\n[Phase 4: Analyze Server Response]{C.END}")
+            print(print_colored("\n[Phase 4: Analyze Server Response]", color='cyan'))
             if response and response.get("status") == "TERMINATE":
-                print(f"  Server Response: 'TERMINATE'")
-                print(f"{C.GREEN}\n--- TEST SUCCESSFUL ---{C.END}")
-                print(f"{C.GREEN}VSS defense WORKED.{C.END}")
-                print(f"{C.GREEN}Server detected the mismatch and terminated the session.{C.END}")
+                print(print_colored(f"  Server Response: 'TERMINATE'", color='red'))
+                print(print_colored("\n--- TEST SUCCESSFUL ---", color='green'))
+                print(print_colored("✅ VSS defense WORKED.", color='green'))
+                print(print_colored("✅ Server detected the mismatch and terminated the session.", color='green'))
             elif response and response.get("status") == "OK":
-                print(f"  Server Response: 'OK'")
-                print(f"{C.RED}\n--- TEST FAILED ---{C.END}")
-                print(f"{C.RED}❌ VULNERABILITY CONFIRMED: Server accepted impostor data!{C.END}")
+                print(print_colored(f"  Server Response: 'OK'", color='red'))
+                print(print_colored("\n--- TEST FAILED ---", color='red'))
+                print(print_colored("❌ VULNERABILITY CONFIRMED: Server accepted impostor data!", color='red'))
             else:
-                print(f"  Server Response: {response}")
-                print(f"{C.YELLOW}\n--- TEST INCONCLUSIVE ---{C.END}")
-                print(f"{C.YELLOW}⚠️ Server did not send a clear OK or TERMINATE.{C.END}")
+                print(print_colored(f"  Server Response: {response}", color='yellow'))
+                print(print_colored("\n--- TEST INCONCLUSIVE ---", color='yellow'))
+                print(print_colored("⚠️ Server did not send a clear OK or TERMINATE.", color='yellow'))
 
     except (ValueError, ConnectionError, socket.error) as e:
         print(f"\n[Attacker] Error: {truncate(e, 120)}")
     finally:
-        print(f"{C.BLUE}[Attacker] Connection closed.{C.END}")
+        print(print_colored("[Attacker] Connection closed.", color='blue'))
 
 if __name__ == "__main__":
     run_attack()

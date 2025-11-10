@@ -44,7 +44,7 @@ def canonical_hash(*args) -> str:
 
     # --- Join and hash ---
     h_input = "||".join(parts).encode('utf-8')
-    print("Hash input", h_input)
+    # print("Hash input", h_input)
     return hashlib.sha256(h_input).hexdigest()
 
 def str_to_hex(s: str) -> str:
