@@ -40,7 +40,7 @@ def simulate_user_login():
         return None
 
     # 1. Simulate user inputting credentials
-    IDi_input = "1.0" # CRITICAL: Must match registration
+    IDi_input = "1.0" 
     PWi_star_input = "password123"
     BMi_star_input = "biometric_data_scan_1" 
     
@@ -162,10 +162,6 @@ def run_client():
             send_message(s, M3)
             print("[Ui] Sent M3. OTAKA Handshake Complete.")
             print(f"[Ui] Final Session Key: {SK_ij}")
-
-            # ==========================================================
-            # --- NEW: CONTINUOUS AUTHENTICATION PHASE (IV-F) ---
-            # ==========================================================
             print("\n[Ui] --- Starting Continuous Authentication (IV-F) ---")
             
             # # 1. Load vectors to simulate

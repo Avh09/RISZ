@@ -6,9 +6,7 @@ from sklearn.neighbors import NearestNeighbors
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 
-# -----------------------------
-# --- Configuration & Constants
-# -----------------------------
+
 FEATURE_COLUMNS = [
     'strokeDuration', 'startX', 'startY', 'stopX', 'stopY',
     'directEndToEndDistance', 'meanResultantLength', 'upDownLeftRightFlag',
@@ -17,14 +15,12 @@ FEATURE_COLUMNS = [
     'midStrokePressure', 'midStrokeArea'
 ]
 
-EPSILON = 5.0              # privacy parameter (lower => more private)
-SENSITIVITY = 1.0         # L1 sensitivity for Laplace mechanism (tune per-feature if needed)
-LAMBDA_FACTOR = 0.7      # used for threshold calibration (median + lambda * MAD)
+EPSILON = 5.0            
+SENSITIVITY = 1.0         
+LAMBDA_FACTOR = 0.7      
 ADAPTIVE_WINDOW = 20
-ADAPTIVE_SMOOTH_ALPHA = 0.3   # smoothing for adaptive threshold (0..1), higher => keep old faster
-RNG = np.random.default_rng(42)  # Fixed seed for reproducibility
-
-# Choose noise mechanism: 'laplace' (default) or 'gaussian'
+ADAPTIVE_SMOOTH_ALPHA = 0.3   
+RNG = np.random.default_rng(42)  
 DP_MECHANISM = 'laplace'
 
 # -----------------------------
@@ -72,11 +68,8 @@ def build_database(df, use_dp=False, dp_epsilon=EPSILON, dp_sensitivity=SENSITIV
         live_sim_data[user_id] = live
     return np.array(db_vectors), np.array(db_labels), live_sim_data
 
-# -----------------------------
-# --- Threshold calibration
-# -----------------------------
+
 def mad_normalized(dlist):
-    """Return MAD scaled to be a robust sigma estimator (approx normal)."""
     if len(dlist) == 0:
         return 0.0
     med = np.median(dlist)
@@ -84,7 +77,6 @@ def mad_normalized(dlist):
     return float(mad) * 1.4826 if mad > 0 else 0.0
 
 def robust_threshold_from_list(dlist, lambda_factor=LAMBDA_FACTOR):
-    """Compute robust threshold = median + lambda * MAD (fallback to std when MAD==0)."""
     if len(dlist) == 0:
         return np.inf
     med = np.median(dlist)
@@ -96,23 +88,19 @@ def robust_threshold_from_list(dlist, lambda_factor=LAMBDA_FACTOR):
     return float(med + lambda_factor * sigma)
 
 def calibrate_thresholds(db_scaled, db_labels, model, lambda_factor=LAMBDA_FACTOR, neighbors_for_calib=3):
-    """
-    Calibrate per-user thresholds on the scaled database.
-    neighbors_for_calib: how many neighbors to use when measuring cross-user distances.
-    """
+
     thresholds = {}
     labels_unique = np.unique(db_labels)
-    # guard neighbors
+
     max_neighbors = min(neighbors_for_calib, len(db_scaled))
     for u in labels_unique:
         idx = np.where(db_labels == u)[0]
         vecs = db_scaled[idx]
         dlist = []
-        # For each vector of user u, compute neighbors (including self); drop the nearest (self) if present
+       
         for v in vecs:
             n = min(max_neighbors, len(db_scaled))
             d, _ = model.kneighbors(v.reshape(1, -1), n_neighbors=n)
-            # if we got at least two neighbors, drop the first (likely self)
             if d.shape[1] > 1:
                 # take distances excluding the nearest (self)
                 dlist.extend(list(d[0][1:]))
@@ -123,9 +111,6 @@ def calibrate_thresholds(db_scaled, db_labels, model, lambda_factor=LAMBDA_FACTO
             thresholds[u] = robust_threshold_from_list(dlist, lambda_factor=lambda_factor)
     return thresholds
 
-# -----------------------------
-# --- Query functions
-# -----------------------------
 def query_vss_database(model, scaler, labels, qvec, n_neighbors=None):
     q_scaled = scaler.transform(np.array(qvec).reshape(1, -1))
     if n_neighbors is None:
@@ -137,12 +122,7 @@ def query_vss_database(model, scaler, labels, qvec, n_neighbors=None):
 def query_vss_with_rejection(model, scaler, labels, qvec, thresholds,
                              adaptive=False, user_hist=None, target=None, ground_truth=None,
                              override_threshold=None, update_on_genuine_only=True):
-    """
-    Query with rejection:
-      - Uses override_threshold if provided.
-      - Optionally updates user_hist (only for genuine attempts if update_on_genuine_only True).
-      - Returns (retrieved_label_or_None, distance, threshold_used)
-    """
+  
     retrieved, dist = query_vss_database(model, scaler, labels, qvec)
     threshold_user = target if target is not None else retrieved
     thr = thresholds.get(threshold_user, np.inf)
@@ -151,11 +131,8 @@ def query_vss_with_rejection(model, scaler, labels, qvec, thresholds,
         thr = override_threshold
 
     accepted = (dist <= thr) and (retrieved == threshold_user)
-
-    # Update history: only for genuine attempts (ground_truth == target). Option to restrict to genuine accepted attempts.
     if user_hist is not None and target is not None and ground_truth == target:
         hist = user_hist.setdefault(target, [])
-        # append the distance even if rejected; caller can decide policy by passing update_on_genuine_only
         if not update_on_genuine_only or (update_on_genuine_only and retrieved == target):
             hist.append(float(dist))
             if len(hist) > ADAPTIVE_WINDOW:
@@ -165,16 +142,9 @@ def query_vss_with_rejection(model, scaler, labels, qvec, thresholds,
         return None, dist, thr
     return retrieved, dist, thr
 
-# -----------------------------
-# --- Adaptive threshold helper (unified & smoothed)
-# -----------------------------
 def compute_adaptive_threshold(static_threshold, history_list, lambda_factor=LAMBDA_FACTOR, 
                                alpha=ADAPTIVE_SMOOTH_ALPHA, allow_tightening=True, allow_relaxation=True):
-    """
-    Adaptive threshold with asymmetric adjustment:
-    - Tightens quickly when user is consistent (low variance)
-    - Relaxes more cautiously when user is struggling (high variance)
-    """
+
     if history_list is None or len(history_list) < 3:
         return static_threshold
     
@@ -195,21 +165,15 @@ def compute_adaptive_threshold(static_threshold, history_list, lambda_factor=LAM
     new_thr = effective_alpha * static_threshold + (1.0 - effective_alpha) * robust_thr
     
     # Safety bounds: don't go too tight or too loose
-    min_threshold = static_threshold * 0.5  # Don't tighten beyond 50% of original
-    max_threshold = static_threshold * 2.0  # Don't relax beyond 200% of original
+    min_threshold = static_threshold * 0.5  
+    max_threshold = static_threshold * 2.0  
     
     return float(np.clip(new_thr, min_threshold, max_threshold))
 
-# -----------------------------
-# --- Evaluate (prebuilt model) with tracking (fixed adaptive logic)
-# -----------------------------
 def evaluate_with_tracking_prebuilt(model, scaler, db_labels, thresholds_ref, live, adaptive=False,
                                     lambda_factor=LAMBDA_FACTOR, alpha_smooth=ADAPTIVE_SMOOTH_ALPHA,
                                     update_hist_on_accepted_only=False):
-    """
-    Evaluate using prebuilt model/scaler/db_labels/thresholds_ref. Adaptive threshold is computed
-    using compute_adaptive_threshold() and history is kept per-target.
-    """
+
     labels = np.array(db_labels)
     thresholds = thresholds_ref.copy()
 
@@ -257,7 +221,6 @@ def evaluate_with_tracking_prebuilt(model, scaler, db_labels, thresholds_ref, li
     # Imposter attempts
     fooled, detected = 0, 0
     for i, v in enumerate(live[imposter]):
-        # For imposter attempts, adaptive threshold is always computed relative to target history (not updated here)
         if adaptive and hist and target in hist and len(hist[target]) >= 2:
             imp_thr = compute_adaptive_threshold(thresholds.get(target, np.inf),
                                                  hist[target],
@@ -294,9 +257,6 @@ def evaluate_with_tracking_prebuilt(model, scaler, db_labels, thresholds_ref, li
         "final_adaptive_threshold": current_thr
     }
 
-# -----------------------------
-# --- Evaluate (build DB inline) -- kept for completeness (similar fixes)
-# -----------------------------
 def evaluate_with_tracking(df, thresholds_ref, live, use_dp=False, adaptive=False,
                            dp_epsilon=EPSILON, dp_sensitivity=SENSITIVITY, dp_mechanism=DP_MECHANISM):
     db_vecs, db_labels, _ = build_database(df, use_dp=use_dp, dp_epsilon=dp_epsilon,
@@ -363,9 +323,7 @@ def evaluate_with_tracking(df, thresholds_ref, live, use_dp=False, adaptive=Fals
         "target_threshold": thresholds.get(target, np.nan)
     }
 
-# -----------------------------
-# --- Privacy Visualization: Distance Perturbation (minor fixes)
-# -----------------------------
+
 def visualize_privacy_protection(df, use_dp_mechanism=DP_MECHANISM):
     """Show how DP protects individual records while maintaining utility"""
     user_id = df['user_id'].unique()[0]
@@ -429,9 +387,6 @@ def visualize_privacy_protection(df, use_dp_mechanism=DP_MECHANISM):
     if np.mean(clean_dists) > 0:
         print(f"   Distance preservation: {(1 - abs(np.mean(noisy_dists) - np.mean(clean_dists))/np.mean(clean_dists)) * 100:.2f}%")
 
-# -----------------------------
-# --- Adaptive Thresholding Over Time Visualization (unchanged except robust indexing)
-# -----------------------------
 def visualize_adaptive_over_time(genuine_static, genuine_adaptive, 
                                  imposter_static, imposter_adaptive):
     """Show how adaptive thresholding evolves over authentication attempts"""
@@ -517,7 +472,7 @@ def visualize_adaptive_over_time(genuine_static, genuine_adaptive,
     plt.show()
     
     # Print stats
-    print(f"\n📈 Adaptive Thresholding Performance:")
+    print(f"\nAdaptive Thresholding Performance:")
     print(f"   Static acceptance rate: {static_cumulative[-1]:.2f}%")
     print(f"   Adaptive acceptance rate: {adapt_cumulative[-1]:.2f}%")
     print(f"   Improvement: {adapt_cumulative[-1] - static_cumulative[-1]:.2f} percentage points")
@@ -525,14 +480,11 @@ def visualize_adaptive_over_time(genuine_static, genuine_adaptive,
     print(f"   Final adaptive threshold: {gen_adapt_thresholds[-1]:.4f}")
     print(f"   Threshold change: {((gen_adapt_thresholds[-1] - genuine_static[0][3]) / genuine_static[0][3] * 100):.2f}%")
 
-# -----------------------------
-# --- Main execution (almost same but using fixed functions)
-# -----------------------------
+
 if __name__ == "__main__":
     df = pd.read_csv('../../data/features_extracted.csv')
     df['upDownLeftRightFlag'], _ = pd.factorize(df['upDownLeftRightFlag'])
 
-    # Calibrate thresholds on clean data
     clean_vecs, clean_labels, live_data_for_testing = build_database(df, use_dp=False)
     scaler_ref = StandardScaler().fit(clean_vecs)
     clean_scaled = scaler_ref.transform(clean_vecs)
@@ -559,7 +511,7 @@ if __name__ == "__main__":
 
     for name, (dp, adapt) in experiments.items():
         print(f"\n=== {name} ===")
-        # Build DB for this experiment (DP vs no DP)
+
         db_vecs_exp, db_labels_exp, live_exp = build_database(df, use_dp=dp,
                                                              dp_epsilon=EPSILON, dp_sensitivity=SENSITIVITY,
                                                              dp_mechanism=DP_MECHANISM)
@@ -631,4 +583,4 @@ if __name__ == "__main__":
     plt.savefig('final_comparison.png', dpi=150, bbox_inches='tight')
     plt.show()
 
-    print("\n✅ All visualizations complete!")
+    print("\n All visualizations complete!")

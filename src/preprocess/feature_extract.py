@@ -1,22 +1,10 @@
 import pandas as pd
 import numpy as np
 from math import sqrt, atan2, degrees
-
-# ============================
-# 1. Load raw data
-# ============================
 df = pd.read_csv("rawdata.csv")
-
-# Ensure time is numeric
 df["time"] = pd.to_numeric(df["time"], errors="coerce")
-
-# Sort for consistent stroke reconstruction
 df = df.sort_values(["device_id", "user_id", "doc_type", "time"]).reset_index(drop=True)
 
-
-# ============================
-# 2. Helper functions
-# ============================
 
 def euclidean_distance(x1, y1, x2, y2):
     """Compute Euclidean distance between two points."""
@@ -25,7 +13,7 @@ def euclidean_distance(x1, y1, x2, y2):
 
 def stroke_features(stroke):
     """Compute all features for a given stroke (DataFrame)."""
-    # --- Basic coordinates ---
+   
     startX = stroke.iloc[0]["x_coor"]
     startY = stroke.iloc[0]["y_coor"]
     stopX = stroke.iloc[-1]["x_coor"]
@@ -132,5 +120,5 @@ features_df = pd.DataFrame(strokes)
 features_df = features_df[group_cols + [c for c in features_df.columns if c not in group_cols]]
 
 features_df.to_csv("features_extracted.csv", index=False)
-print("✅ Feature extraction complete! Saved as features_extracted.csv")
+print("Feature extraction complete! Saved as features_extracted.csv")
 print(features_df.head())

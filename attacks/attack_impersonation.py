@@ -198,7 +198,7 @@ def run_attack():
             else:
                 print(f"  Server Response: {response}")
                 print(f"{C.YELLOW}\n--- TEST INCONCLUSIVE ---{C.END}")
-                print(f"{C.YELLOW}⚠️ Server did not send a clear OK or TERMINATE.{C.END}")
+                print(f"{C.YELLOW}Server did not send a clear OK or TERMINATE.{C.END}")
 
     except (ValueError, ConnectionError, socket.error) as e:
         print(f"\n[Attacker] Error: {truncate(e, 120)}")

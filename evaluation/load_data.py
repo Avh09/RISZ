@@ -4,15 +4,12 @@ from tqdm import tqdm
 
 # --- Configuration ---
 # !!! UPDATE THIS PATH !!!
-DATASET_PATH = "data/bioident_dataset.csv" # Update this to your dataset's file name
-USER_ID_COLUMN = "user_id" # Update this to the correct column name
-VECTOR_COLUMNS = [f"feature_{i}" for i in range(15)] # Update this to your 15 feature columns
-
+DATASET_PATH = "data/bioident_dataset.csv" 
+USER_ID_COLUMN = "user_id" 
+VECTOR_COLUMNS = [f"feature_{i}" for i in range(15)] 
 MILVUS_URI = "http://127.0.0.1:19530"
 COLLECTION_NAME = "cabb_db"
 VECTOR_DIMENSION = 15
-
-# -----------------------
 
 client = MilvusClient(uri=MILVUS_URI)
 
@@ -26,15 +23,11 @@ def load_data():
         return
 
     print(f"Found {len(df)} records.")
-    
-    # Check if collection exists and has data
     if client.has_collection(COLLECTION_NAME) and client.query(COLLECTION_NAME, "user_id != ''", limit=1):
         print(f"Collection '{COLLECTION_NAME}' already exists and contains data. Skipping load.")
         return
     else:
         print(f"Collection is empty. Proceeding with data insertion...")
-
-    # Batch insert data
     batch_size = 1000
     for i in tqdm(range(0, len(df), batch_size), desc="Inserting data into Milvus"):
         batch = df.iloc[i:i+batch_size]

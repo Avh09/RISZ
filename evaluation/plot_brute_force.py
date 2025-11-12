@@ -5,8 +5,6 @@ import os
 # --- Configuration ---
 PLOT_DIR = "plots"
 PLOT_FILENAME = os.path.join(PLOT_DIR, "fig_brute_force_complexity_log_blue.png")
-
-# Number of features (x-axis)
 features = np.arange(1, 21)
 n_values = 100
 work = np.power(float(n_values), features)

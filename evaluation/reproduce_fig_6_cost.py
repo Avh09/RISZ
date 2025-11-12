@@ -3,8 +3,19 @@ import numpy as np
 import os
 import json
 
-# --- Configuration ---
-RESULTS_FILE = "benchmark_results.json"
+
+PAPER_COSTS = {
+    'Ayub et al.': 5.9089,
+    'Irshad et al.': 27.2349,
+    'Mishra et al.': 9.7285,
+    'Rewal et al.': 7.9417,
+    'Huang et al.': 13.5767,
+    'Hu et al.': 8.2681,
+    'HPostQCA-VSS (Paper)': 4.1741,
+}
+
+MY_UI_COST = 10.9028 
+
 PLOT_DIR = "plots"
 PLOT_FILENAME = os.path.join(PLOT_DIR, "fig06_relative_Ui_cost.png")
 
@@ -32,64 +43,34 @@ def calculate_costs(primitives):
 
 def generate_relative_plot():
     os.makedirs(PLOT_DIR, exist_ok=True)
+    schemes = list(PAPER_COSTS.keys())
+    relative_values = [PAPER_COSTS[name] / MY_UI_COST for name in schemes]
 
-    # --- Load benchmark results ---
-    try:
-        with open(RESULTS_FILE, 'r') as f:
-            primitives = json.load(f)
-    except FileNotFoundError:
-        print(f"❌ Error: '{RESULTS_FILE}' not found. Run 'python3 run_benchmark.py' first.")
-        return
+    plt.figure(figsize=(10, 6))
+    bars = plt.bar(schemes, relative_values, color='skyblue', edgecolor='black')
 
-    # --- Compute costs ---
-    all_ui_costs = calculate_costs(primitives)
-    my_cost = all_ui_costs["HPostQCA-VSS (Implementation)"]
+    plt.axhline(1.0, color='r', linestyle='--', linewidth=2, label="HPostQCA-VSS (My Code)")
 
-    # --- Compute relative ratios ---
-    schemes = list(all_ui_costs.keys())
-    relative_values = [all_ui_costs[name] / my_cost for name in schemes]
-    abs_values = [all_ui_costs[name] for name in schemes]
+    for bar, val in zip(bars, relative_values):
+        plt.text(bar.get_x() + bar.get_width()/2, val + 0.02, f"{val:.2f}",
+                 ha='center', va='bottom', fontsize=13, fontweight='medium')
 
-    # --- Sort by relative cost ---
-    sorted_idx = np.argsort(relative_values)
-    schemes = [schemes[i] for i in sorted_idx]
-    relative_values = [relative_values[i] for i in sorted_idx]
-    abs_values = [abs_values[i] for i in sorted_idx]
-
-    # --- Create plot ---
-    plt.figure(figsize=(12, 7))
-    colors = ['#87CEEB' if 'Implementation' not in s else '#E74C3C' for s in schemes]
-
-    bars = plt.barh(schemes, relative_values, color=colors, edgecolor='black', height=0.55, zorder=3)
-    plt.axvline(1.0, color='r', linestyle='--', linewidth=2, label='Implemented Scheme (Baseline = 1.0)', zorder=2)
-
-    # --- Add annotations ---
-    for bar, rel, abs_val in zip(bars, relative_values, abs_values):
-        plt.text(rel + 0.05, bar.get_y() + bar.get_height()/2,
-                 f"{rel:.2f}×  ({abs_val*1000:.2f} µs)",
-                 va='center', fontsize=15, fontweight='semibold')
-
-    # --- Labels and aesthetics ---
-    plt.title("Relative Computational Cost Comparison\n(All Schemes vs. HPostQCA-VSS)", 
-              fontsize=20, fontweight='bold', pad=25)
-    plt.xlabel("Relative Cost (Scheme Cost / Implemented Cost)", fontsize=18, labelpad=14)
-    plt.ylabel("Authentication Scheme", fontsize=18, labelpad=14)
-
-    plt.xticks(fontsize=16)
+   
+    plt.title("Relative Smart Device Computational Costs (vs. Implementation)", fontsize=16, fontweight='bold')
+    plt.ylabel("Relative Cost (Paper Value / Obtained Value)", fontsize=15)
+    plt.xticks(rotation=30, ha='right', fontsize=16)
     plt.yticks(fontsize=16)
     plt.legend(loc='lower right', fontsize=15)
 
     # Make grid lines extend fully and sit below bars
     plt.grid(True, axis='x', linestyle='--', alpha=0.7, zorder=0)
 
-    # Extend x-axis slightly more to show full grid lines and annotations
-    plt.xlim(0, max(relative_values) * 1.35)
+    y_max = max(relative_values) * 1.15
+    plt.ylim(0, y_max)
 
     plt.tight_layout()
-
-    # --- Save and show ---
-    plt.savefig(PLOT_FILENAME, dpi=300, bbox_inches='tight')
-    print(f"\n✅ Plot saved to {PLOT_FILENAME}")
+    plt.savefig(PLOT_FILENAME, dpi=300)
+    print(f"Plot saved to {PLOT_FILENAME}")
     plt.show()
 
 

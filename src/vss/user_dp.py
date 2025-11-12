@@ -10,7 +10,7 @@ Requirements:
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-plt.rcParams.update({'font.size': 13})  # Increase default font size for all plots
+plt.rcParams.update({'font.size': 13}) 
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.neighbors import NearestNeighbors
 from sklearn.decomposition import PCA
@@ -18,9 +18,6 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, top_k_accuracy_score
 from sklearn.model_selection import train_test_split
 
-# -----------------------------
-# --- CONFIG
-# -----------------------------
 FEATURE_COLUMNS = [
     'strokeDuration', 'startX', 'startY', 'stopX', 'stopY',
     'directEndToEndDistance', 'meanResultantLength', 'upDownLeftRightFlag',
@@ -28,8 +25,6 @@ FEATURE_COLUMNS = [
     'averageDirection', 'lengthOfTrajectory', 'averageVelocity',
     'midStrokePressure', 'midStrokeArea'
 ]
-
-# Privacy budgets to sweep; np.inf -> no DP
 EPS_VALUES = [0.5, 1.0, 2.0, 5.0, 10.0, np.inf]
 SENSITIVITY = 1.0
 RNG = np.random.default_rng(12345)
@@ -54,9 +49,7 @@ def add_dp_noise(v, epsilon, sensitivity=SENSITIVITY, mechanism='laplace'):
         sigma = sensitivity / float(epsilon)
         return v + RNG.normal(0.0, sigma, size=v.shape)
 
-# -----------------------------
-# --- Build DB (registration templates) and live data
-# -----------------------------
+
 def build_db_and_live(df, epsilon):
     """
     For each user: shuffle, split in half -> registration templates & live (test) samples
@@ -80,9 +73,6 @@ def build_db_and_live(df, epsilon):
         live[uid] = live_samples
     return np.array(reg_vecs), np.array(reg_labels), live
 
-# -----------------------------
-# --- Robust threshold calibration (same as earlier)
-# -----------------------------
 def mad_normalized(dlist):
     if len(dlist) == 0:
         return 0.0
@@ -112,9 +102,7 @@ def calibrate_thresholds(db_scaled, db_labels, model, neighbors_for_calib=3, lam
         thresholds[u] = robust_threshold_from_list(dlist, lambda_factor=lambda_factor) if len(dlist) > 0 else np.inf
     return thresholds
 
-# -----------------------------
-# --- VSS evaluation (FAR/FRR/ACC)
-# -----------------------------
+
 def query_vss_database(model, scaler, labels, qvec):
     q_scaled = scaler.transform(np.array(qvec).reshape(1, -1))
     dist, idx = model.kneighbors(q_scaled)
@@ -148,11 +136,9 @@ def evaluate_vss(model, scaler, db_labels, thresholds, live):
     ACC = (1 - (FAR + FRR) / 200) * 100
     return FAR, FRR, ACC
 
-# -----------------------------
-# --- Privacy Metrics: perturbation & pairwise distortion
-# -----------------------------
+
 def compute_privacy_metrics(original, noisy):
-    # original, noisy: (N, D)
+
     perturb = np.linalg.norm(original - noisy, axis=1)
     mean_perturb = np.mean(perturb)
     # pairwise means
@@ -172,20 +158,12 @@ def compute_privacy_metrics(original, noisy):
     distortion = 0.0 if pair_orig == 0 else abs(pair_noisy - pair_orig) / pair_orig
     return mean_perturb, distortion
 
-# -----------------------------
-# --- Re-identification attack (attacker trains on registration templates)
-# -----------------------------
+
 def run_reid_attack(reg_vecs, reg_labels):
-    """
-    Split registration templates into train/test for attack.
-    Train a multiclass logistic regression to predict user_id from template vector.
-    Return attack accuracy (top-1) and top-k accuracy.
-    """
-    # encode labels to ints
+
     le = LabelEncoder()
     y = le.fit_transform(reg_labels)
     X = reg_vecs.copy()
-    # standardize features for classifier
     scaler = StandardScaler().fit(X)
     Xs = scaler.transform(X)
     Xtr, Xte, ytr, yte = train_test_split(Xs, y, test_size=ATTACK_TEST_SIZE, random_state=42, stratify=y)
@@ -202,15 +180,11 @@ def run_reid_attack(reg_vecs, reg_labels):
         topk = acc
     return acc, topk, len(le.classes_)
 
-# -----------------------------
-# --- MAIN: sweep epsilons, evaluate metrics + attack
-# -----------------------------
+
 if __name__ == "__main__":
     df = pd.read_csv(DATA_PATH)
     # factorize categorical flag
     df['upDownLeftRightFlag'], _ = pd.factorize(df['upDownLeftRightFlag'])
-
-    # select a single user sample for privacy metric computation (take up to 50 samples)
     representative_uid = df['user_id'].unique()[0]
     rep_original = df[df['user_id'] == representative_uid][FEATURE_COLUMNS].values[:50]
 
@@ -220,8 +194,6 @@ if __name__ == "__main__":
     for eps in EPS_VALUES:
         print(f"\n=== Running epsilon = {eps} ===")
         reg_vecs, reg_labels, live = build_db_and_live(df, eps)
-
-        # If registration database too small, skip
         if len(reg_vecs) < 10 or len(np.unique(reg_labels)) < 2:
             print("Not enough registration data or users; skipping this ε.")
             continue
@@ -261,7 +233,6 @@ if __name__ == "__main__":
     print("\nSummary (auth metrics):\n", res_df)
     print("\nSummary (re-id attack):\n", reid_df)
 
-    # === Plot: Accuracy vs Epsilon ===
     plt.figure(figsize=(8, 5))
     eps_plot = res_df['epsilon'].replace(np.inf, np.max([e for e in EPS_VALUES if e != np.inf]) * 1.2)
     plt.plot(eps_plot, res_df['ACC'], marker='o', label='Authentication Accuracy (ACC)')
@@ -272,8 +243,6 @@ if __name__ == "__main__":
     plt.legend()
     plt.savefig('dp_tradeoff_accuracy.png', dpi=150)
     plt.show()
-
-    # === Plot: Re-ID leakage vs epsilon ===
     plt.figure(figsize=(8, 5))
     plt.plot(eps_plot, reid_df['reid_top1'], marker='o', label='Re-ID top1 accuracy (attacker)')
     plt.plot(eps_plot, reid_df['reid_topk'], marker='s', label=f'Re-ID top{ATTACK_TOP_K} acc')
@@ -285,7 +254,6 @@ if __name__ == "__main__":
     plt.savefig('dp_reid_leakage.png', dpi=150)
     plt.show()
 
-    # === Plot: Privacy metrics vs epsilon (mean perturbation & distortion) ===
     plt.figure(figsize=(8, 5))
     plt.plot(eps_plot, res_df['mean_perturb'], marker='o', label='Mean perturbation (L2 norm)')
     plt.plot(eps_plot, res_df['distortion'], marker='s', label='Pairwise distortion (relative)')
@@ -296,7 +264,6 @@ if __name__ == "__main__":
     plt.savefig('dp_privacy_metrics.png', dpi=150)
     plt.show()
 
-    # === PCA visual examples for a subset of epsilons ===
     pca = PCA(n_components=2)
     rep_scaled = StandardScaler().fit_transform(rep_original)
     rep_2d = pca.fit_transform(rep_scaled)
@@ -311,4 +278,4 @@ if __name__ == "__main__":
         plt.savefig(f'dp_pca_eps_{e}.png', dpi=150)
         plt.show()
 
-    print("\n✅ Finished DP tradeoff + leakage simulation. Check generated PNGs for visualizations.")
+    print("\n Finished DP tradeoff + leakage simulation. Check generated PNGs for visualizations.")

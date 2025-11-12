@@ -6,8 +6,7 @@ import pandas as pd
 import os
 from sklearn.model_selection import train_test_split
 
-# --- Configuration ---
-DATASET_PATH = "features_extracted.csv" # Assumes it's in the root
+DATASET_PATH = "features_extracted.csv"
 USER_ID_COLUMN = "user_id" 
 FEATURE_COLUMNS = [
     'strokeDuration', 'startX', 'startY', 'stopX', 'stopY',
@@ -17,28 +16,19 @@ FEATURE_COLUMNS = [
     'midStrokePressure', 'midStrokeArea'
 ]
 VSS_API_URL = "http://127.0.0.1:8000/check_similarity"
-NUM_SAMPLES = 500 # Number of imposter vectors to test
-TARGET_USER = 1.0 # The user we are simulating
-
-# --- Output folder ---
+NUM_SAMPLES = 500 
+TARGET_USER = 1.0 
 PLOT_DIR = "plots"
 PLOT_FILENAME = os.path.join(PLOT_DIR, "fig10_accuracy_reproduction.png")
-# -----------------------
 
 def get_vectors_for_test():
-    """
-    Loads two sets of vectors, both from the 20% "live" test set.
-    1. valid_user_vectors: The 20% "live" test set for our target user.
-    2. imposter_vectors: A random sample of the 20% "live" test sets 
-                         from *all other* users.
-    """
+
     try:
         df = pd.read_csv(DATASET_PATH)
     except FileNotFoundError:
         print(f"Error: Dataset file not found at {DATASET_PATH}")
         return None, None
     
-    # Factorize categorical column
     df['upDownLeftRightFlag'], _ = pd.factorize(df['upDownLeftRightFlag'])
 
     valid_user_vectors = []
@@ -50,10 +40,9 @@ def get_vectors_for_test():
     
     for user_id in all_user_ids:
         user_df = df[df[USER_ID_COLUMN] == user_id]
-        if len(user_df) < 2: # Skip users with only one vector
+        if len(user_df) < 2: 
             continue
             
-        # Split this user's data 80/20, just like the server did
         _, test_data = train_test_split(
             user_df, 
             test_size=0.20, 
@@ -73,8 +62,6 @@ def get_vectors_for_test():
         
     print(f"Found {len(valid_user_vectors)} valid 'live' vectors for user {TARGET_USER}.")
 
-    # 2. Get vectors for IMPOSTERS
-    # Sample N vectors from the imposter "live" data
     if len(all_imposter_live_vectors) < NUM_SAMPLES:
         print(f"Warning: Not enough imposter live vectors. Using {len(all_imposter_live_vectors)}.")
         imposter_vectors = all_imposter_live_vectors
@@ -85,9 +72,7 @@ def get_vectors_for_test():
     return valid_user_vectors, imposter_vectors
 
 def test_similarity(test_vectors):
-    """
-    Queries the VSS server with a list of vectors and returns the distances.
-    """
+
     distances = []
     for vector in test_vectors:
         try:
@@ -118,40 +103,29 @@ def main():
     
     print(f"\n--- Imposter (Live) Test ---")
     print(f"Average Euclidean distance: {np.mean(imposter_distances):.4f}")
-    
-    # Plotting the histogram
+
     plt.figure(figsize=(10, 6))
-
-    # Plot the "Imposter Vectors" as a bell curve
     plt.hist(imposter_distances, bins=50, alpha=0.7, label="Imposter Vectors (Fake Users' Live Data)")
-
-    # Plot the "Valid Vectors" as a separate, sharper curve
     plt.hist(valid_distances, bins=20, alpha=1.0, color='red', label=f'Valid User {TARGET_USER} (Live Vectors)')
 
-    # --- Title and labels with larger fonts ---
     plt.title("VSS Similarity Distribution", fontsize=16, fontweight='bold')
     plt.xlabel("Euclidean Distance (Similarity)", fontsize=16)
     plt.ylabel("Number of Query Users", fontsize=16)
 
-    # --- Make axis tick labels bigger ---
     plt.tick_params(axis='both', which='major', labelsize=16, width=1.5)
     plt.tick_params(axis='both', which='minor', labelsize=16, width=1.2)
     
     ymin, ymax = plt.ylim()
     plt.ylim(ymin, ymax * 1.1) 
 
-    # --- Legend font size ---
     plt.legend(fontsize=14)
-
-    # --- Thicker axis spines (for better visibility in papers) ---
     for spine in plt.gca().spines.values():
         spine.set_linewidth(1.5)
 
-    # --- Save the file ---
     plt.tight_layout()
     plt.savefig(PLOT_FILENAME, dpi=300)
     print(f"\nGraph successfully saved to {PLOT_FILENAME}")
-    plt.show()  # You can comment this out if you don't want the pop-up
+    plt.show() 
 
 if __name__ == "__main__":
     main()

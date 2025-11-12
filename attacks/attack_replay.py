@@ -54,14 +54,14 @@ def run_replay_attack():
             
             if not M2:
                 print("  Server closed connection, as expected.")
-                    print("\n  Result: ✅ SUCCESSFUL DEFENSE. The replay attack was blocked[cite: 314].")
+                print("\n  Result:  SUCCESSFUL DEFENSE. The replay attack was blocked[cite: 314].")
             else:
                 print(f"  Server responded with M2: {M2}")
-                print("\n  Result: ❌ FAILED DEFENSE. Server accepted a stale timestamp.")
+                print("\n  Result:  FAILED DEFENSE. Server accepted a stale timestamp.")
 
     except (ConnectionResetError, TypeError, AttributeError):
         print("  Server closed connection unexpectedly (this is good!).")
-        print("\n  Result: ✅ SUCCESSFUL DEFENSE. The server rejected the invalid message.")
+        print("\n  Result:  SUCCESSFUL DEFENSE. The server rejected the invalid message.")
     except Exception as e:
         print(f"  An error occurred: {e}")
 

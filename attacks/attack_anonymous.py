@@ -170,7 +170,7 @@ def run_anonymity_demo():
     if M1_session_1['TIDi'] != M1_session_2['TIDi']:
         print(C.RED + "[ATTACKER]   RESULT: No match. The TIDi is different." + C.END)
     else:
-        print(C.RED + "[ATTACKER]   RESULT: ✅ Match! I can trace this user!" + C.END)
+        print(C.RED + "[ATTACKER]   RESULT: Match! I can trace this user!" + C.END)
 
     # 2. Field Check
     reused_fields = []
@@ -182,7 +182,7 @@ def run_anonymity_demo():
     if not reused_fields:
         print(C.RED + "[ATTACKER]   RESULT: No match. All other M1 fields are also different." + C.END)
     else:
-        print(C.RED + f"[ATTACKER]   RESULT: ✅ Match! Reused fields: {reused_fields}. I can trace this user!" + C.END)
+        print(C.RED + f"[ATTACKER]   RESULT: Match! Reused fields: {reused_fields}. I can trace this user!" + C.END)
 
     # 3. IDi Guess
     guessed_secret_t3 = h("some_common_password_guess")
@@ -193,7 +193,7 @@ def run_anonymity_demo():
     if not (str_1.startswith("1.0") and str_2.startswith("1.0")):
          print(C.RED + "[ATTACKER]   RESULT: No match. Both derived IDs are garbage." + C.END)
     else:
-         print(C.RED + "[ATTACKER]   RESULT: ✅ Match! My guess was right! I have linked the user!" + C.END)
+         print(C.RED + "[ATTACKER]   RESULT: Match! My guess was right! I have linked the user!" + C.END)
 
     # 4. Statistical Analysis
     printable_results = []

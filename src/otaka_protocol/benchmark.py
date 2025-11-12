@@ -50,8 +50,6 @@ results["Tcha"] = (time.perf_counter() - start) / N_RUNS * 1000
 results = {k: v / results["Th"] for k, v in results.items()}
 print(results)
 
-
-# --- Print results ---
 print("\n=== Average Primitive Timings (ms) ===")
 for k, v in results.items():
     print(f"{k:6s}: {v:.6f} ms")

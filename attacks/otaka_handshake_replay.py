@@ -3,22 +3,16 @@ import json
 import numpy as np
 import time
 import sys
-
-# --- Import all the necessary functions from your helper file ---
 from src.otaka_protocol.helper import (
     canonical_hash, h, hex_to_str, str_to_hex, xor_data, get_timestamp, 
     check_timestamp, send_message, recv_message,
     rlwe_generate_keypair, rlwe_compute_shared_secret, Mod2
 )
-
-# --- Configuration ---
 HOST = '127.0.0.1'
 PORT = 65432
-DELTA_T = 10  # Must match the server's DELTA_T
+DELTA_T = 10  
 CLIENT_STORAGE_FILE = "client_storage.json"
-# --- End Configuration ---
 
-# --- Colors ---
 class C:
     HEADER = "\033[95m"
     BLUE = "\033[94m"
@@ -29,7 +23,6 @@ class C:
     BOLD = "\033[1m"
     END = "\033[0m"
 
-# --- Global truncation options ---
 np.set_printoptions(threshold=10, edgeitems=3, linewidth=100, suppress=True)
 
 def truncate(x, n=25):
@@ -50,8 +43,6 @@ def simulate_user_login():
         print(f"{C.RED}Error: '{CLIENT_STORAGE_FILE}' not found.{C.END}")
         print(f"{C.YELLOW}Please run 'python -m src.otaka_protocol.registration' first.{C.END}")
         return None
-
-    # --- Use the same test credentials as registration ---
     IDi_input = "1.0"
     PWi_star_input = "password123"
     BMi_star_input = "biometric_data_scan_1" 
@@ -86,17 +77,11 @@ def run_attack():
     my_x_hex = login_secrets['x_hex']
     
     captured_M1 = None
-
-    # -----------------------------------------------------------------
-    # PHASE 1: CAPTURE A LEGITIMATE M1
-    # -----------------------------------------------------------------
     print(f"\n{C.BLUE}[Phase 1: Perform legitimate session to capture M1]{C.END}")
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.connect((HOST, PORT))
             print(f"{C.CYAN}  Connection 1 established → {HOST}:{PORT}{C.END}")
-
-            # --- Generate M1 ---
             (f1, e1), ai = rlwe_generate_keypair()
             TS1 = get_timestamp()
             X1 = xor_data(str_to_hex(my_IDi), h(my_t3, TS1, my_TIDi))
@@ -135,10 +120,6 @@ def run_attack():
     if not captured_M1:
         print(f"{C.RED}  Failed to capture M1. Aborting.{C.END}")
         return
-
-    # -----------------------------------------------------------------
-    # PHASE 2: REPLAY THE STALE M1
-    # -----------------------------------------------------------------
     wait_time = DELTA_T + 2
     print(f"\n{C.BLUE}[Phase 2: Waiting {wait_time}s for TS1 to become stale...]{C.END}")
     time.sleep(wait_time)

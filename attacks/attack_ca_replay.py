@@ -13,7 +13,6 @@ from src.otaka_protocol.helper import (
     encrypt_data
 )
 
-# --- Colors ---
 RESET = "\033[0m"
 BOLD = "\033[1m"
 RED = "\033[91m"
@@ -22,8 +21,6 @@ YELLOW = "\033[93m"
 CYAN = "\033[96m"
 BLUE = "\033[94m"
 MAGENTA = "\033[95m"
-
-# --- Configuration ---
 HOST = '127.0.0.1'
 PORT = 65432
 DELTA_T = 10
@@ -36,11 +33,7 @@ FEATURE_COLUMNS = [
     'averageDirection', 'lengthOfTrajectory', 'averageVelocity',
     'midStrokePressure', 'midStrokeArea'
 ]
-# --- End Configuration ---
-
-
 def truncate(x, n=20):
-    """Return a short preview of x (string or list)."""
     if x is None:
         return "None"
     s = str(x)
@@ -48,13 +41,12 @@ def truncate(x, n=20):
 
 
 def simulate_user_login():
-    """Simulates the User Login Phase (Section IV-D)."""
     try:
         with open(CLIENT_STORAGE_FILE, "r") as f:
             client_data = json.load(f)
     except FileNotFoundError:
         print(f"{RED}Error:{RESET} '{CLIENT_STORAGE_FILE}' not found.")
-        print("Please run 'python -m src.otaka_protocol.registration' first.")
+        print("Run 'python -m src.otaka_protocol.registration' first.")
         return None
 
     IDi_input = "1.0"
@@ -76,7 +68,6 @@ def simulate_user_login():
 
 
 def load_one_live_vector(user_id):
-    """Loads one live feature vector."""
     try:
         df = pd.read_csv(DATASET_PATH)
     except FileNotFoundError:
@@ -118,7 +109,7 @@ def run_attack():
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.connect((HOST, PORT))
-            print(f"{GREEN}  ✓ MITM connection established to {HOST}:{PORT}{RESET}")
+            print(f"{GREEN}  MITM connection established to {HOST}:{PORT}{RESET}")
 
             # --- Handshake ---
             (f1, e1), ai = rlwe_generate_keypair()
@@ -153,9 +144,7 @@ def run_attack():
             ACK = canonical_hash(my_TIDi_next, SK_ij, TS3)
             M3 = {"ACK": ACK, "TS3": TS3}
             send_message(s, M3)
-            print(f"{GREEN}  ✓ OTAKA Handshake complete. Session live.{RESET}")
-
-            # --- Capture Phase ---
+            print(f"{GREEN}  OTAKA Handshake complete. Session live.{RESET}")
             print(f"\n{YELLOW}[Phase 2: Capture Valid CA Packet (P_valid)]{RESET}")
             full_hash_iv = h(my_t3, TS3)
             iv = full_hash_iv[:32]
@@ -190,10 +179,10 @@ def run_attack():
                 send_message(s, P_valid_message)
                 response = recv_message(s)
                 if response and response.get("status") == "OK":
-                    print(f"    {GREEN}✓ Accepted by server.{RESET}")
+                    print(f"    {GREEN}Accepted by server.{RESET}")
                     replay_successes += 1
                 else:
-                    print(f"    {RED}✗ Rejected or terminated.{RESET}")
+                    print(f"    {RED}Rejected or terminated.{RESET}")
                     break
 
             rar = (replay_successes / replay_attempts) * 100
@@ -217,5 +206,5 @@ if __name__ == "__main__":
     except ImportError:
         print(f"{RED}ERROR:{RESET} 'add_laplace_noise' missing in helper.py.")
     
-    print(f"{CYAN}Ensure your VSS and OTAKA servers are running in separate terminals.{RESET}")
+    print(f"{CYAN}Ensure VSS and OTAKA servers are running in separate terminals.{RESET}")
     run_attack()

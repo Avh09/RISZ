@@ -9,7 +9,7 @@ import random
 # --- Configuration ---
 VSS_API_URL = "http://127.0.0.1:8000/check_similarity"
 BATCH_SIZES = [10, 100, 500, 1000, 1500, 2000] 
-TOTAL_QUERIES = 14316 # Total records in the paper's dataset
+TOTAL_QUERIES = 14316
 DATASET_PATH = "features_extracted.csv"
 FEATURE_COLUMNS = [
     'strokeDuration', 'startX', 'startY', 'stopX', 'stopY',
@@ -19,12 +19,10 @@ FEATURE_COLUMNS = [
     'midStrokePressure', 'midStrokeArea'
 ]
 MAX_BATCH = max(BATCH_SIZES)
-N_REPEATS = 3 # Number of times to repeat each batch test to average out noise
+N_REPEATS = 3 
 
-# --- Output folder ---
 PLOT_DIR = "plots"
 PLOT_FILENAME = os.path.join(PLOT_DIR, "fig11_speed_reproduction.png")
-# -----------------------
 
 def load_original_vectors():
     """Loads a sample of 'original' vectors from the dataset."""
@@ -36,38 +34,31 @@ def load_original_vectors():
         return []
     
     df['upDownLeftRightFlag'], _ = pd.factorize(df['upDownLeftRightFlag'])
-    # Return a random sample of vectors
+
     return df[FEATURE_COLUMNS].sample(MAX_BATCH, replace=True).values.tolist()
 
 def generate_shuffled_vectors():
     """Generates 'shuffled' (fake) vectors."""
     print(f"Generating {MAX_BATCH} random shuffled vectors...")
-    # Generate random vectors with values between 0 and 1,
-    # scaled by 1000 to simulate real data ranges.
     return (np.random.rand(MAX_BATCH, 15) * 1000).tolist()
 
 def run_speed_test():
     print("Reproducing Figure 11: VSS Query Speed Analysis...")
     os.makedirs(PLOT_DIR, exist_ok=True)
-    
-    # 1. Prepare both sets of query vectors
     original_vectors = load_original_vectors()
     shuffled_vectors = generate_shuffled_vectors()
 
     if not original_vectors:
-        return
-        
-    # --- Warm-up Phase ---
+        return 
+    
     print("\n--- Warming up the VSS server (10 queries)... ---")
     for vector in original_vectors[:10]:
         try:
             requests.post(VSS_API_URL, json={"vector": vector})
         except Exception:
-            pass # Ignore errors, just want to warm up
+            pass 
     print("Server is warm.")
-    # --------------------------
 
-    # 2. Run the benchmark for both types
     original_times = []
     shuffled_times = []
 
@@ -80,8 +71,6 @@ def run_speed_test():
         for batch_size in BATCH_SIZES:
             print(f"  Testing batch size: {batch_size} (running {N_REPEATS} times to average)...")
             batch_to_test = vectors_to_test[:batch_size]
-            
-            # --- Repeat test and average ---
             batch_times = []
             for i in range(N_REPEATS):
                 start_time = time.time()
@@ -89,28 +78,23 @@ def run_speed_test():
                     try:
                         requests.post(VSS_API_URL, json={"vector": vector})
                     except Exception as e:
-                        pass # Don't print errors in the loop
+                        pass
                 end_time = time.time()
                 batch_times.append(end_time - start_time)
-            
-            # Use the average time for this batch
+
             time_per_batch = np.mean(batch_times)
             
             avg_time_per_query = time_per_batch / batch_size
-            
-            # Extrapolate to find total time for all 14,316 users
             total_time_for_all = avg_time_per_query * TOTAL_QUERIES
             times_list.append(total_time_for_all)
             
             print(f"    Avg time per query: {avg_time_per_query*1000:.4f} ms")
             print(f"    Extrapolated total time: {total_time_for_all:.2f} s")
 
-    # 3. Plotting the graph
     plt.figure(figsize=(10, 6))
     plt.plot(BATCH_SIZES, original_times, marker='o', label="Original Vector")
     plt.plot(BATCH_SIZES, shuffled_times, marker='s', label="Shuffle Vector")
-    
-    # --- Font and style adjustments ---
+
     plt.title("Reproduction of Figure 11: VSS Total Search Time", fontsize=16, fontweight='bold')
     plt.xlabel("Number of users per query search", fontsize=15)
     plt.ylabel(f"Total Search Time (Sec) for {TOTAL_QUERIES} users", fontsize=15)
@@ -127,6 +111,5 @@ def run_speed_test():
     plt.show()
 
 if __name__ == "__main__":
-    # Make sure your VSS server is running first!
     print("Ensure 'src/vss_backend/vss_server.py' (the 80/20 server) is running.")
     run_speed_test()
